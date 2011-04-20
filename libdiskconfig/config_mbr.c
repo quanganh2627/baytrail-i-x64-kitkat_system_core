@@ -211,14 +211,14 @@ static struct write_list *
 mk_empty_ptable(void)
 {
     struct write_list *wr;
-    static const short int magic = PC_BIOS_BOOT_SIG;
+    static const unsigned char magic[2] = {0x55, 0xAA};
 
-    wr = alloc_wl(72);
+    wr = alloc_wl(66);
     if (!wr)
         return NULL;
-    memset(wr->data, 0, 70);
-    memcpy(wr->data + 70, &magic, sizeof(magic));
-    wr->offset = 440;
+    memset(wr->data, 0, 64);
+    memcpy(wr->data + 64, magic, sizeof(magic));
+    wr->offset = 446;
     return wr;
 }
 
