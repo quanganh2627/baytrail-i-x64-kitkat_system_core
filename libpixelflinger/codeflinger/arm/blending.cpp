@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/blending.cpp
+/* libs/pixelflinger/codeflinger/arm/blending.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -23,7 +23,7 @@
 
 #include <cutils/log.h>
 
-#include "codeflinger/GGLAssembler.h"
+#include "codeflinger/arm/GGLAssembler.h"
 
 
 namespace android {

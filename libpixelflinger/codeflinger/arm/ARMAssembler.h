@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/ARMAssembler.h
+/* libs/pixelflinger/codeflinger/arm/ARMAssembler.h
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -26,7 +26,7 @@
 #include "tinyutils/smartpointer.h"
 
 #include "tinyutils/smartpointer.h"
-#include "codeflinger/ARMAssemblerInterface.h"
+#include "codeflinger/arm/ARMAssemblerInterface.h"
 #include "codeflinger/CodeCache.h"
 
 namespace android {
