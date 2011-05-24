@@ -22,6 +22,11 @@ LOCAL_SHARED_LIBRARIES := libsuspend
 LOCAL_STATIC_LIBRARIES := libminui libpixelflinger_static libpng
 LOCAL_STATIC_LIBRARIES += libz libstdc++ libcutils libm libc
 
+#libpixelflinger_static for x86 is using encoder under hardware/intel/apache-harmony
+ifeq ($(TARGET_ARCH),x86)
+LOCAL_STATIC_LIBRARIES += libenc
+endif
+
 include $(BUILD_EXECUTABLE)
 
 define _add-charger-image

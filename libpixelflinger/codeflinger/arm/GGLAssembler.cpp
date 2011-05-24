@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/GGLAssembler.cpp
+/* libs/pixelflinger/codeflinger/arm/GGLAssembler.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -24,7 +24,7 @@
 #include <sys/types.h>
 #include <cutils/log.h>
 
-#include "codeflinger/GGLAssembler.h"
+#include "codeflinger/arm/GGLAssembler.h"
 
 namespace android {
 

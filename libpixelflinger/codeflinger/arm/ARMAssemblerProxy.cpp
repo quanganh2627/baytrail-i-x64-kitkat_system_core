@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/ARMAssemblerProxy.cpp
+/* libs/pixelflinger/codeflinger/arm/ARMAssemblerProxy.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "codeflinger/ARMAssemblerProxy.h"
+#include "codeflinger/arm/ARMAssemblerProxy.h"
 
 namespace android {
 
