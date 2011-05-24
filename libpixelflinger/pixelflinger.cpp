@@ -32,7 +32,11 @@
 #include "scanline.h"
 #include "trap.h"
 
-#include "codeflinger/GGLAssembler.h"
+#if defined(__arm__)
+#include "codeflinger/arm/GGLAssembler.h"
+#elif defined (__i386__)
+#include "codeflinger/x86/GGLX86Assembler.h"
+#endif
 #include "codeflinger/CodeCache.h"
 
 #include <stdio.h> 
