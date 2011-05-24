@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/load_store.cpp
+/* libs/pixelflinger/codeflinger/arm/load_store.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -18,7 +18,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <cutils/log.h>
-#include "GGLAssembler.h"
+#include "codeflinger/arm/GGLAssembler.h"
 
 #ifdef __ARM_ARCH__
 #include <machine/cpu-features.h>

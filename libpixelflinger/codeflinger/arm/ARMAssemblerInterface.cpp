@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/ARMAssemblerInterface.cpp
+/* libs/pixelflinger/codeflinger/arm/ARMAssemblerInterface.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -22,7 +22,7 @@
 #include <sys/types.h>
 
 #include <cutils/log.h>
-#include "ARMAssemblerInterface.h"
+#include "codeflinger/arm/ARMAssemblerInterface.h"
 
 namespace android {
 
