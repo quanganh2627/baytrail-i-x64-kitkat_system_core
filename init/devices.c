@@ -56,6 +56,9 @@
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
 #define MODULES_BLKLST  "/ueventd.modules.blacklist"
+#define CRDA_BIN_PATH   "/system/bin/crda"
+#define PLATFORM_STR    "platform"
+#define CHANGE_STR      "change"
 
 extern struct selabel_handle *sehandle;
 
@@ -68,6 +71,7 @@ struct uevent {
     const char *firmware;
     const char *partition_name;
     const char *device_name;
+    const char *country;
     const char *modalias;
     int partition_num;
     int major;
@@ -397,6 +401,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->path = "";
     uevent->subsystem = "";
     uevent->firmware = "";
+    uevent->country = "";
     uevent->major = -1;
     uevent->minor = -1;
     uevent->partition_name = NULL;
@@ -433,6 +438,9 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
+        } else if (!strncmp(msg, "COUNTRY=", 8)) {
+            msg += 8;
+            uevent->country = msg;
         } else if (!strncmp(msg, "MODALIAS=", 9)) {
             msg += 9;
             uevent->modalias = msg;
@@ -443,9 +451,10 @@ static void parse_event(const char *msg, struct uevent *uevent)
             ;
     }
 
-    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d }\n",
+    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d, '%s' }\n",
                     uevent->action, uevent->path, uevent->subsystem,
-                    uevent->firmware, uevent->major, uevent->minor);
+                    uevent->firmware, uevent->major, uevent->minor,
+                    uevent->country);
 }
 
 static char **get_character_device_symlinks(struct uevent *uevent)
@@ -944,6 +953,61 @@ root_free_out:
     free(root);
 }
 
+static int handle_crda_event(struct uevent *uevent)
+{
+    int status;
+    int ret;
+    pid_t pid;
+    char country_env[11];
+    char *argv[] = { CRDA_BIN_PATH, NULL };
+    char *envp[] = { country_env  , NULL };
+
+    if(strncmp(uevent->subsystem, PLATFORM_STR, strlen(PLATFORM_STR)))
+       return (-1);
+
+    if(strncmp(uevent->action, CHANGE_STR, strlen(CHANGE_STR)))
+       return (-1);
+
+    INFO("executing CRDA country=%s\n", uevent->country);
+    snprintf(country_env, sizeof(country_env), "COUNTRY=%s", uevent->country);
+
+    if (access(argv[0], X_OK)) {
+        INFO("crda_event not handled - no crda executable\n");
+        return -1;
+    }
+
+    switch(pid = fork()) {
+    case -1:
+         /* Error occured */
+         ERROR("handle_crda_event - fork error\n");
+         return (-1);
+         break;
+    case  0:
+         /* Child related processing */
+         if (execve(argv[0], argv, envp) ==  -1) {
+              ERROR("handle_crda_event - execve error\n");
+              return (-1);
+         }
+         break;
+    default:
+         /* Parent related processing */
+         /*
+          * man waitpid: POSIX.1-2001 specifies that if the disposition
+          * of SIGCHLD is set to SIG_IGN, then children that terminate
+          * do not become zombies and a call to waitpid() will block
+          * until all children have terminated, and then fail with errno
+          * set to ECHILD.
+          * With ICS, google has introduced this behavior in "ueventd.c"
+          *          signal(SIGCHLD, SIG_IGN);
+          * So handling of waitpid() return is no more needed.
+          */
+          waitpid (pid, &status,0);
+          break;
+    }
+
+    return 0;
+}
+
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
@@ -980,6 +1044,7 @@ void handle_device_fd()
 
         handle_device_event(&uevent);
         handle_firmware_event(&uevent);
+        handle_crda_event(&uevent);
     }
 }
 
