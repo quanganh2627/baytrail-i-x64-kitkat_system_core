@@ -77,6 +77,13 @@
 #define AID_SDCARD_AV     1034  /* external storage audio/video access */
 #define AID_SDCARD_ALL    1035  /* access all users external storage */
 
+/* Non-AOSP user ID:
+ * As the system partition can be updated over the air, AID numbers should never be changed.
+ * That's why it's better to pick-up the highest possible number for non-aosp aid:
+ * This will allow the  AOSP user list to grow in the future without impacting non-asop aid.
+ */
+#define AID_SMARTCARD     1999  /* smart card subsystem */
+
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
 #define AID_DIAG          2002  /* access to diagnostic resources */
@@ -169,6 +176,9 @@ static const struct android_id_info android_ids[] = {
     { "misc",          AID_MISC, },
     { "security",  AID_SEP_GROUP },
     { "nobody",        AID_NOBODY, },
+
+    // Non-Aosp user id
+    { "smartcard",     AID_SMARTCARD, },
 };
 
 #define android_id_count \
