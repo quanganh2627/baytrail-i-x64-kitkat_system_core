@@ -58,6 +58,7 @@ TOOLS := \
 	du \
 	md5 \
 	clear \
+	lsusb \
 	getenforce \
 	setenforce \
 	chcon \
