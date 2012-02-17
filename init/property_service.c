@@ -107,6 +107,7 @@ struct {
 } control_perms[] = {
     { "dumpstate",AID_SHELL, AID_LOG },
     { "ril-daemon",AID_RADIO, AID_RADIO },
+    { "pcsc",AID_WIFI, AID_WIFI },  /* Allow wpa_supplicant to start the pcsc-lite daemon used for EAP-SIM/AKA auth */
      {NULL, 0, 0 }
 };
 
