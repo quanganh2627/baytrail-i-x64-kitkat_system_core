@@ -270,6 +270,13 @@ typedef enum {
 } audio_mode_t;
 
 typedef enum {
+    AUDIO_MODE_FM_OFF,
+    AUDIO_MODE_FM_ON,
+    AUDIO_MODE_FM_CNT,
+    AUDIO_MODE_FM_MAX = AUDIO_MODE_FM_CNT -1
+} audio_fm_mode_t;
+
+typedef enum {
     AUDIO_IN_ACOUSTICS_AGC_ENABLE    = 0x0001,
     AUDIO_IN_ACOUSTICS_AGC_DISABLE   = 0,
     AUDIO_IN_ACOUSTICS_NS_ENABLE     = 0x0002,
