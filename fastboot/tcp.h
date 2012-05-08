@@ -26,42 +26,16 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _USB_H_
-#define _USB_H_
+#ifndef _TCP_H_
+#define _TCP_H_
 
-typedef struct usb_handle usb_handle;
+typedef struct {
+    int sockfd;
+} tcp_handle;
 
-typedef struct usb_ifc_info usb_ifc_info;
-
-struct usb_ifc_info
-{
-        /* from device descriptor */
-    unsigned short dev_vendor;
-    unsigned short dev_product;
-
-    unsigned char dev_class;
-    unsigned char dev_subclass;
-    unsigned char dev_protocol;
-
-    unsigned char ifc_class;
-    unsigned char ifc_subclass;
-    unsigned char ifc_protocol;
-
-    unsigned char has_bulk_in;
-    unsigned char has_bulk_out;
-
-    unsigned char writable;
-
-    char serial_number[256];
-    char device_path[256];
-};
-
-typedef int (*ifc_match_func)(usb_ifc_info *ifc);
-
-usb_handle *usb_open(ifc_match_func callback);
-int usb_close(void *userdata);
-int usb_read(void *userdata, void *_data, int len);
-int usb_write(void *userdata, const void *_data, int len);
-int usb_wait_for_disconnect(usb_handle *h);
+tcp_handle *tcp_open(const char *host);
+int tcp_close(void *userdata);
+int tcp_read(void *userdata, void *_data, int len);
+int tcp_write(void *userdata, const void *_data, int len);
 
 #endif
