@@ -64,10 +64,11 @@ boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offs
                         unsigned page_size, unsigned base, unsigned tags_offset,
                         unsigned *bootimg_size);
 
-static usb_handle *usb = 0;
+static transport_t transport;
 static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
+static const char *host = 0;
 static int wipe_data = 0;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
@@ -264,6 +265,14 @@ usb_handle *open_device(void)
     }
 }
 
+tcp_handle *open_device_tcp(void)
+{
+    static tcp_handle *tcp = 0;
+    if(tcp) return tcp;
+    tcp = tcp_open(host);
+    return tcp;
+}
+
 void list_devices(void) {
     // We don't actually open a USB device here,
     // just getting our callback called so we can
@@ -307,6 +316,7 @@ void usage(void)
             "  -n <page size>                           specify the nand page size. default: 2048\n"
             "  -S <size>[K|M|G]                         automatically sparse files greater than\n"
             "                                           size.  0 to disable\n"
+            "  -t <host>                                connect to remote fastboot on host\n"
         );
 }
 
@@ -531,11 +541,11 @@ struct sparse_file **load_sparse_files(const char *fname, int max_size)
     return out_s;
 }
 
-static int64_t get_target_sparse_limit(struct usb_handle *usb)
+static int64_t get_target_sparse_limit(transport_t *trans)
 {
     int64_t limit = 0;
     char response[FB_RESPONSE_SZ + 1];
-    int status = fb_getvar(usb, response, "max-download-size");
+    int status = fb_getvar(trans, response, "max-download-size");
 
     if (!status) {
         limit = strtoul(response, NULL, 0);
@@ -548,7 +558,7 @@ static int64_t get_target_sparse_limit(struct usb_handle *usb)
     return limit;
 }
 
-static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
+static int64_t get_sparse_limit(transport_t *trans, int64_t size)
 {
     int64_t limit;
 
@@ -558,7 +568,7 @@ static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
         limit = sparse_limit;
     } else {
         if (target_sparse_limit == -1) {
-            target_sparse_limit = get_target_sparse_limit(usb);
+            target_sparse_limit = get_target_sparse_limit(trans);
         }
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
@@ -583,17 +593,17 @@ static int needs_erase(const char *part)
     /* The function fb_format_supported() currently returns the value
      * we want, so just call it.
      */
-     return fb_format_supported(usb, part);
+     return fb_format_supported(&transport, part);
 }
 
-void do_flash(usb_handle *usb, const char *pname, const char *fname)
+void do_flash(transport_t *trans, const char *pname, const char *fname)
 {
     int64_t sz64;
     void *data;
     int64_t limit;
 
     sz64 = file_size(fname);
-    limit = get_sparse_limit(usb, sz64);
+    limit = get_sparse_limit(trans, sz64);
     if (limit) {
         struct sparse_file **s = load_sparse_files(fname, limit);
         if (s == NULL) {
@@ -832,7 +842,7 @@ int main(int argc, char **argv)
 
     while (1) {
         int option_index = 0;
-        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:h", longopts, NULL);
+        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:ht:", longopts, NULL);
         if (c < 0) {
             break;
         }
@@ -888,6 +898,9 @@ int main(int argc, char **argv)
         case 'w':
             wants_wipe = 1;
             break;
+        case 't':
+            host = optarg;
+            break;
         case '?':
             return 1;
         default:
@@ -914,7 +927,17 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    usb = open_device();
+    if(host) {
+        transport.userdata = open_device_tcp();
+        transport.close = tcp_close;
+        transport.read = tcp_read;
+        transport.write = tcp_write;
+    } else {
+        transport.userdata = open_device();
+        transport.close = usb_close;
+        transport.read = usb_read;
+        transport.write = usb_write;
+    }
 
     while (argc > 0) {
         if(!strcmp(*argv, "getvar")) {
@@ -923,18 +946,10 @@ int main(int argc, char **argv)
             skip(2);
         } else if(!strcmp(*argv, "erase")) {
             require(2);
-
-            if (fb_format_supported(usb, argv[1])) {
-                fprintf(stderr, "******** Did you mean to fastboot format this partition?\n");
-            }
-
             fb_queue_erase(argv[1]);
             skip(2);
         } else if(!strcmp(*argv, "format")) {
             require(2);
-            if (erase_first && needs_erase(argv[1])) {
-                fb_queue_erase(argv[1]);
-            }
             fb_queue_format(argv[1], 0);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
@@ -985,7 +1000,9 @@ int main(int argc, char **argv)
             if (erase_first && needs_erase(pname)) {
                 fb_queue_erase(pname);
             }
-            do_flash(usb, pname, fname);
+            data = load_file(fname, &sz);
+            if (data == 0) die("cannot load '%s': %s\n", fname, strerror(errno));
+            fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
             char *kname = argv[2];
@@ -1036,6 +1053,6 @@ int main(int argc, char **argv)
     if (fb_queue_is_empty())
         return 0;
 
-    status = fb_execute_queue(usb);
+    status = fb_execute_queue(&transport);
     return (status) ? 1 : 0;
 }
