@@ -26,6 +26,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 
+#include <sys/system_properties.h>
 #include <fcntl.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -901,6 +902,7 @@ static void handle_device(struct uevent *uevent,
 
     if(!strcmp(action, "add")) {
         make_device(uevent, devpath, block);
+        __system_property_set("ctl.dev_added",devpath);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
@@ -912,6 +914,7 @@ static void handle_device(struct uevent *uevent,
             for (i = 0; links[i]; i++)
                 remove_link(devpath, links[i]);
         }
+        __system_property_set("ctl.dev_removed",devpath);
         unlink(devpath);
     }
 
