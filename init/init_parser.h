@@ -17,6 +17,8 @@
 #ifndef _INIT_INIT_PARSER_H_
 #define _INIT_INIT_PARSER_H_
 
+#include <stdbool.h>
+
 #define INIT_PARSER_MAXARGS 64
 
 #include <stdbool.h>
