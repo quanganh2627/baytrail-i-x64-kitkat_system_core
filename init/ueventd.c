@@ -21,7 +21,8 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <signal.h>
-
+#include <libgen.h>
+#include <errno.h>
 #include <private/android_filesystem_config.h>
 
 #include "ueventd.h"
@@ -47,11 +48,54 @@ static void import_kernel_nv(char *name, int in_qemu)
     }
 }
 
-int ueventd_main(int argc, char **argv)
+static void do_event_loop(void (*handle_event_fp)(struct uevent*)) __attribute__ ((noreturn));
+static void do_event_loop(void (*handle_event_fp)(struct uevent*))
 {
     struct pollfd ufd;
     int nr;
+
+    ufd.events = POLLIN;
+    ufd.fd = get_device_fd();
+
+    while(1) {
+        ufd.revents = 0;
+        nr = poll(&ufd, 1, -1);
+        if (nr <= 0)
+            continue;
+        if (ufd.revents == POLLIN)
+            handle_events_fd(handle_event_fp);
+    }
+}
+
+
+int ueventd_main(int argc, char **argv)
+{
     char tmp[32];
+    pid_t pid;
+
+    /* kernel will launch a program in user space to load
+     * modules, by default it is modprobe.
+     * Kernel doesn't send module parameters, so we don't
+     * need to support them.
+     * No deferred loading in this case.
+     */
+    if (!strcmp(basename(argv[0]), "modprobe")) {
+        if (argc >= 4
+                && argv[3] != NULL
+                && *argv[3] != '\0') {
+            uid_t uid;
+
+            /* We only accept requests from root user (kernel) */
+            uid = getuid();
+            if (uid)
+                return -EPERM;
+
+            return module_probe(argv[3]);
+        } else {
+            /* modprobe is called without enough arguments */
+            return -EINVAL;
+        }
+    }
 
     /*
      * init sets the umask to 077 for forked processes. We need to
@@ -84,18 +128,25 @@ int ueventd_main(int argc, char **argv)
     snprintf(tmp, sizeof(tmp), "/ueventd.%s.rc", hardware);
     ueventd_parse_config_file(tmp);
 
-    device_init();
+    pid = fork();
 
-    ufd.events = POLLIN;
-    ufd.fd = get_device_fd();
-
-    while(1) {
-        ufd.revents = 0;
-        nr = poll(&ufd, 1, -1);
-        if (nr <= 0)
-            continue;
-        if (ufd.revents == POLLIN)
-               handle_device_fd();
+    /* We fork here because we want to process the device drivers loading
+     * independently from the device firmware loading.
+     * If we do drivers and firmware events processing in the same process we
+     * will block the driver loading because ueventd cannot load it's corresponding
+     * firmware (requested by driver).
+     */
+    if (pid < 0) {
+        ERROR("Failed to fork in ueventd!\n");
+        return -1;
+    } else if (pid > 0) {
+        /* In parent we loop for device events for loading drivers */
+        device_init();
+        do_event_loop(handle_device_event);
+    } else {
+        /* In child we loop for device events for loading firmware */
+        uevent_fd_init();
+        do_event_loop(handle_firmware_event);
     }
 }
 
@@ -115,7 +166,7 @@ void set_device_permission(int nargs, char **args)
     mode_t perm;
     uid_t uid;
     gid_t gid;
-    int prefix = 0;
+    int wildcard = 0;
     char *endptr;
     int ret;
     char *tmp = 0;
@@ -147,10 +198,8 @@ void set_device_permission(int nargs, char **args)
             asprintf(&tmp, "/dev/mtd/mtd%d", n);
         name = tmp;
     } else {
-        int len = strlen(name);
-        if (name[len - 1] == '*') {
-            prefix = 1;
-            name[len - 1] = '\0';
+        if (strchr(name, '*')) {
+            wildcard = 1;
         }
     }
 
@@ -177,6 +226,6 @@ void set_device_permission(int nargs, char **args)
     }
     gid = ret;
 
-    add_dev_perms(name, attr, perm, uid, gid, prefix);
+    add_dev_perms(name, attr, perm, uid, gid, wildcard);
     free(tmp);
 }

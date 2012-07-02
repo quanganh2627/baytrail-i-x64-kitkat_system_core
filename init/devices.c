@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <fnmatch.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,32 +41,24 @@
 #include <sys/wait.h>
 
 #include <cutils/list.h>
+#include <cutils/probe_module.h>
 #include <cutils/uevent.h>
+#include <cutils/module_parsers.h>
 
 #include "devices.h"
 #include "util.h"
 #include "log.h"
+#include "parser.h"
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
+#define MODULES_BLKLST  "/system/etc/ueventd.modules.blacklist"
 
 extern struct selabel_handle *sehandle;
 
 static int device_fd = -1;
-
-struct uevent {
-    const char *action;
-    const char *path;
-    const char *subsystem;
-    const char *firmware;
-    const char *partition_name;
-    const char *device_name;
-    int partition_num;
-    int major;
-    int minor;
-};
 
 struct perms_ {
     char *name;
@@ -73,7 +66,7 @@ struct perms_ {
     mode_t perm;
     unsigned int uid;
     unsigned int gid;
-    unsigned short prefix;
+    unsigned short wildcard;
 };
 
 struct perm_node {
@@ -91,10 +84,11 @@ struct platform_node {
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
+static list_declare(deferred_module_loading_list);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short prefix) {
+                  unsigned short wildcard) {
     struct perm_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
@@ -112,7 +106,7 @@ int add_dev_perms(const char *name, const char *attr,
     node->dp.perm = perm;
     node->dp.uid = uid;
     node->dp.gid = gid;
-    node->dp.prefix = prefix;
+    node->dp.wildcard = wildcard;
 
     if (attr)
         list_add_tail(&sys_perms, &node->plist);
@@ -134,8 +128,8 @@ void fixup_sys_perms(const char *upath)
          */
     list_for_each(node, &sys_perms) {
         dp = &(node_to_item(node, struct perm_node, plist))->dp;
-        if (dp->prefix) {
-            if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
+        if (dp->wildcard) {
+            if (fnmatch(dp->name + 4, upath, 0) != 0)
                 continue;
         } else {
             if (strcmp(upath, dp->name + 4))
@@ -174,8 +168,8 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
         perm_node = node_to_item(node, struct perm_node, plist);
         dp = &perm_node->dp;
 
-        if (dp->prefix) {
-            if (strncmp(path, dp->name, strlen(dp->name)))
+        if (dp->wildcard) {
+            if (fnmatch(dp->name, path, 0) != 0)
                 continue;
         } else {
             if (strcmp(path, dp->name))
@@ -324,6 +318,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->partition_name = NULL;
     uevent->partition_num = -1;
     uevent->device_name = NULL;
+    uevent->modalias = NULL;
 
         /* currently ignoring SEQNUM */
     while(*msg) {
@@ -354,6 +349,9 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
+        } else if(!strncmp(msg, "MODALIAS=", 9)) {
+            msg += 9;
+            uevent->modalias = msg;
         }
 
         /* advance to after the next \0 */
@@ -667,8 +665,72 @@ static void handle_generic_device_event(struct uevent *uevent)
              uevent->major, uevent->minor, links);
 }
 
-static void handle_device_event(struct uevent *uevent)
+static void handle_deferred_module_loading()
 {
+    struct listnode *node = NULL;
+    struct listnode *next = NULL;
+    struct module_alias_node *alias = NULL;
+    int ret = -1;
+
+    list_for_each_safe(node, next, &deferred_module_loading_list) {
+        alias = node_to_item(node, struct module_alias_node, list);
+
+        if (alias && alias->pattern) {
+            INFO("deferred loading of module for %s\n", alias->pattern);
+            ret = insmod_by_dep(alias->pattern, "", NULL, 1, NULL,
+                    MODULES_BLKLST);
+            /* if it looks like file system where these files are is not
+             * ready, keep the module in defer list for retry. */
+            if (!(ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS))) {
+                free(alias->pattern);
+                list_remove(node);
+                free(alias);
+            }
+        }
+    }
+}
+
+int module_probe(const char *modalias)
+{
+    return insmod_by_dep(modalias, "", NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
+}
+
+static void handle_module_loading(const char *modalias)
+{
+    char *tmp;
+    struct module_alias_node *node;
+    int ret;
+
+
+    handle_deferred_module_loading();
+
+    if (!modalias) return;
+
+    ret = insmod_by_dep(modalias, "", NULL, 1, NULL, MODULES_BLKLST);
+
+    if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
+        node = calloc(1, sizeof(*node));
+        if (node) {
+            node->pattern = strdup(modalias);
+            if (!node->pattern) {
+                free(node);
+            } else {
+                list_add_tail(&deferred_module_loading_list, &node->list);
+                INFO("add to queue for deferred module loading: %s",
+                        node->pattern);
+            }
+        } else {
+            ERROR("failed to allocate memory to store device id for deferred module loading.\n");
+        }
+    }
+}
+
+void handle_device_event(struct uevent *uevent)
+{
+    if (!strcmp(uevent->action,"add")) {
+        handle_module_loading(uevent->modalias);
+    }
+
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
         fixup_sys_perms(uevent->path);
 
@@ -817,7 +879,7 @@ root_free_out:
     free(root);
 }
 
-static void handle_firmware_event(struct uevent *uevent)
+void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
     int ret;
@@ -828,16 +890,11 @@ static void handle_firmware_event(struct uevent *uevent)
     if(strcmp(uevent->action, "add"))
         return;
 
-    /* we fork, to avoid making large memory allocations in init proper */
-    pid = fork();
-    if (!pid) {
-        process_firmware_event(uevent);
-        exit(EXIT_SUCCESS);
-    }
+    process_firmware_event(uevent);
 }
 
 #define UEVENT_MSG_LEN  1024
-void handle_device_fd()
+void handle_events_fd(void (*handle_event_fp)(struct uevent*))
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
@@ -851,8 +908,7 @@ void handle_device_fd()
         struct uevent uevent;
         parse_event(msg, &uevent);
 
-        handle_device_event(&uevent);
-        handle_firmware_event(&uevent);
+        handle_event_fp(&uevent);
     }
 }
 
@@ -876,7 +932,7 @@ static void do_coldboot(DIR *d)
     if(fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
-        handle_device_fd();
+        handle_events_fd(handle_device_event);
     }
 
     while((de = readdir(d))) {
@@ -899,7 +955,7 @@ static void do_coldboot(DIR *d)
     }
 }
 
-static void coldboot(const char *path)
+void coldboot(const char *path)
 {
     DIR *d = opendir(path);
     if(d) {
@@ -918,14 +974,7 @@ void device_init(void)
     if (is_selinux_enabled() > 0) {
         sehandle = selinux_android_file_context_handle();
     }
-
-    /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
-    if(device_fd < 0)
-        return;
-
-    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
+    uevent_fd_init();
 
     if (stat(coldboot_done, &info) < 0) {
         t0 = get_usecs();
@@ -939,6 +988,17 @@ void device_init(void)
     } else {
         log_event_print("skipping coldboot, already done\n");
     }
+}
+
+void uevent_fd_init(void)
+{
+   /* is 1MB enough? udev uses 16MB! */
+    device_fd = uevent_open_socket(1024*1024, true);
+    if(device_fd < 0)
+        return;
+
+    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
+    fcntl(device_fd, F_SETFL, O_NONBLOCK);
 }
 
 int get_device_fd()
