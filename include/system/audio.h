@@ -586,6 +586,7 @@ enum {
     /* Line out for av devices */
     AUDIO_DEVICE_OUT_AUX_LINE                  = 0x200000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
+    AUDIO_DEVICE_OUT_WIDI                      = 0x1000000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
