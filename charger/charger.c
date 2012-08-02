@@ -103,6 +103,8 @@ struct animation {
     int cur_cycle;
     int num_cycles;
 
+    int anim_thresh;
+
     /* current capacity being animated */
     int capacity;
 };
@@ -141,9 +143,19 @@ static struct frame batt_anim_frames[] = {
         .min_capacity = 0,
     },
     {
+        .name = "charger/battery_0a",
+        .disp_time = 750,
+        .min_capacity = 20,
+    },
+    {
         .name = "charger/battery_1",
         .disp_time = 750,
         .min_capacity = 20,
+    },
+    {
+        .name = "charger/battery_1a",
+        .disp_time = 750,
+        .min_capacity = 40,
     },
     {
         .name = "charger/battery_2",
@@ -159,7 +171,6 @@ static struct frame batt_anim_frames[] = {
         .name = "charger/battery_4",
         .disp_time = 750,
         .min_capacity = 80,
-        .level_only = true,
     },
     {
         .name = "charger/battery_5",
@@ -675,6 +686,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
     struct animation *batt_anim = charger->batt_anim;
     int cur_frame;
     int disp_time;
+    int batt_cap;
 
     if (!batt_anim->run || now < charger->next_screen_transition)
         return;
@@ -685,6 +697,17 @@ static void update_screen_state(struct charger *charger, int64_t now)
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
         LOGV("[%lld] animation done\n", now);
+
+        /* Stop at the correct-level, as animation could have
+           ended at the next level */
+        batt_cap = get_battery_capacity(charger);
+        if (batt_cap < batt_anim->frames[batt_anim->anim_thresh].min_capacity)
+            batt_anim->cur_frame = batt_anim->anim_thresh - 1;
+        else
+            batt_anim->cur_frame = batt_anim->anim_thresh;
+
+        redraw_screen(charger);
+        reset_animation(batt_anim);
         return;
     }
 
@@ -692,7 +715,6 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-        int batt_cap;
         int ret;
 
         LOGV("[%lld] animation starting\n", now);
@@ -706,6 +728,11 @@ static void update_screen_state(struct charger *charger, int64_t now)
                     break;
             }
             batt_anim->cur_frame = i - 1;
+            /* Run animation only till the next segment */
+            if (i == batt_anim->num_frames)
+                batt_anim->anim_thresh = batt_anim->cur_frame;
+            else
+                batt_anim->anim_thresh = batt_anim->cur_frame + 1;
 
             /* show the first frame for twice as long */
             disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time * 2;
@@ -746,7 +773,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
         while (batt_anim->cur_frame < batt_anim->num_frames &&
                batt_anim->frames[batt_anim->cur_frame].level_only)
             batt_anim->cur_frame++;
-        if (batt_anim->cur_frame >= batt_anim->num_frames) {
+        if (batt_anim->cur_frame > batt_anim->anim_thresh) {
             batt_anim->cur_cycle++;
             batt_anim->cur_frame = 0;
 
