@@ -466,6 +466,8 @@ int do_mount_all(int nargs, char **args)
     int status;
     const char *prop;
     struct fstab *fstab;
+    char prop_val[PROP_VALUE_MAX];
+
 
     if (nargs != 2) {
         return -1;
@@ -489,7 +491,12 @@ int do_mount_all(int nargs, char **args)
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
         klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        fstab = fs_mgr_read_fstab(args[1]);
+        ret = expand_props(prop_val, args[1], sizeof(prop_val));
+        if (ret) {
+            ERROR("cannot expand '%s' while assigning to '%s'\n", args[1], prop_val);
+            return -1;
+        }
+        fstab = fs_mgr_read_fstab(prop_val);
         child_ret = fs_mgr_mount_all(fstab);
         fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
