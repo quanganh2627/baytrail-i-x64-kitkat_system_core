@@ -366,7 +366,8 @@ enum {
     //devices not supported for codec offload
     AUDIO_DEVICE_OUT_NON_OFFLOAD = (AUDIO_DEVICE_OUT_ALL & ~(AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
-                                 AUDIO_DEVICE_OUT_WIRED_HEADPHONE)),
+                                 AUDIO_DEVICE_OUT_WIRED_HEADPHONE |
+                                 AUDIO_DEVICE_OUT_EARPIECE)),
 };
 
 typedef uint32_t audio_devices_t;
