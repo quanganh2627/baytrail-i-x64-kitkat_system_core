@@ -74,6 +74,12 @@
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
 
+#define TEMP_BASE_PATH          "/sys/class/thermal/thermal_zone"
+#define TEMP_SENS_TYPE          "/type"
+#define TEMP_SENS_VAL           "/temp"
+#define TEMP_MON_TYPE           "skin0"
+#define CRIT_TEMP_THRESH        64000
+
 #define RTC_FILE                 "/dev/rtc0"
 #define IPC_DEVICE_NAME          "/dev/mid_ipc"
 #define IPC_WRITE_ALARM_TO_OSNIB 0xC5
@@ -929,6 +935,70 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     }
 }
 
+static int get_temp_int(void)
+{
+    int sensor_count = 0;
+    char buf[256];
+    FILE *temp_fd;
+    static int ret = -1;
+
+    /* if the sysfs path is found already, just return with value */
+    if (ret != -1)
+        return ret;
+
+    while (true) {
+        sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+
+        temp_fd = fopen(buf, "r");
+        if (temp_fd == NULL) {
+            ret = -1;
+            break;
+        } else {
+            memset(buf, 0, sizeof(buf));
+            fseek(temp_fd, 0, SEEK_SET);
+            fscanf(temp_fd, "%s\n", buf);
+            if (!strcmp(buf, TEMP_MON_TYPE)) {
+                ret = sensor_count;
+                fclose(temp_fd);
+                break;
+            }
+        }
+        sensor_count++;
+    }
+
+    return ret;
+}
+
+static void handle_temperature_state(struct charger *charger)
+{
+    int temp, sensor_type;
+    FILE *temp_fd;
+    char buf[256];
+
+    sensor_type = get_temp_int();
+    if (sensor_type == -1)
+        return;
+
+    sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_type, TEMP_SENS_VAL);
+
+    temp_fd = fopen(buf, "r");
+    if (temp_fd == NULL) {
+        LOGE("Unable to open file %s\n", buf);
+        return;
+    }
+
+    fseek(temp_fd, 0, SEEK_SET);
+    fscanf(temp_fd, "%d\n", &temp);
+    if (temp >= CRIT_TEMP_THRESH) {
+        autosuspend_disable();
+        LOGI("Temperature(%d) is higher than threshold(%d), "
+             "shutting down system.\n", temp, CRIT_TEMP_THRESH);
+        system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
+        android_reboot(ANDROID_RB_POWEROFF, 0, 0);
+    }
+    fclose(temp_fd);
+}
+
 int write_alarm_to_osnib(int mode)
 {
     int devfd, errNo, ret;
@@ -1074,6 +1144,7 @@ static void event_loop(struct charger *charger)
         LOGV("[%lld] event_loop()\n", now);
         handle_input_state(charger, now);
         handle_power_supply_state(charger, now);
+        handle_temperature_state(charger);
 
         /* do screen update last in case any of the above want to start
          * screen transitions (animations, etc)
