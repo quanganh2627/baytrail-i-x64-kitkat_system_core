@@ -62,6 +62,7 @@
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
+#define BOOT_BATT_MIN_CAP_THRS  3
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
@@ -138,6 +139,11 @@ struct uevent {
 };
 
 static struct frame batt_anim_frames[] = {
+    {
+        .name = "charger/battery_crit",
+        .disp_time = 750,
+        .min_capacity = 0,
+    },
     {
         .name = "charger/battery_0",
         .disp_time = 750,
@@ -653,6 +659,12 @@ static void draw_battery(struct charger *charger)
         LOGV("drawing frame #%d name=%s min_cap=%d time=%d\n",
              batt_anim->cur_frame, frame->name, frame->min_capacity,
              frame->disp_time);
+
+        if (get_battery_capacity(charger) < BOOT_BATT_MIN_CAP_THRS) {
+            struct frame *crit_frame = &batt_anim->frames[0];
+            draw_surface_centered(charger, crit_frame->surface);
+            LOGV("drawing battery_crit frame\n");
+        }
     }
 }
 
@@ -852,8 +864,13 @@ static void process_key(struct charger *charger, int code, int64_t now)
         if (key->down) {
             int64_t reboot_timeout = key->timestamp + POWER_ON_KEY_TIME;
             if (now >= reboot_timeout) {
-                LOGI("[%lld] rebooting\n", now);
-                android_reboot(ANDROID_RB_RESTART, 0, 0);
+                if (get_battery_capacity(charger) >= BOOT_BATT_MIN_CAP_THRS) {
+                    LOGI("[%lld] rebooting\n", now);
+                    android_reboot(ANDROID_RB_RESTART, 0, 0);
+                } else {
+                    LOGI("[%lld] ignore power-button press, battery level "
+                            "less than minimum\n", now);
+                }
             } else {
                 /* if the key is pressed but timeout hasn't expired,
                  * make sure we wake up at the right-ish time to check
