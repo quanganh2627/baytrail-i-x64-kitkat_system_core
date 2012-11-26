@@ -40,6 +40,7 @@
 #include <cutils/list.h>
 #include <cutils/misc.h>
 #include <cutils/uevent.h>
+#include <suspend/autosuspend.h>
 
 #include "minui/minui.h"
 
@@ -708,6 +709,10 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
         redraw_screen(charger);
         reset_animation(batt_anim);
+
+        if (charger->num_supplies_online != 0)
+            autosuspend_enable();
+
         return;
     }
 
@@ -855,6 +860,7 @@ static void process_key(struct charger *charger, int code, int64_t now)
                  */
                 set_next_key_check(charger, key, POWER_ON_KEY_TIME);
             }
+            autosuspend_disable();
         } else {
             /* if the power key got released, force screen state cycle */
             if (key->pending)
@@ -877,6 +883,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
     if (charger->num_supplies_online == 0) {
         if (charger->next_pwr_check == -1) {
+            autosuspend_disable();
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
             LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
@@ -1016,6 +1023,7 @@ int main(int argc, char **argv)
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
     reset_animation(charger->batt_anim);
+    autosuspend_disable();
     kick_animation(charger->batt_anim);
 
     event_loop(charger);
