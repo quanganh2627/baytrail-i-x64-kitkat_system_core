@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <linux/rtc.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,8 +30,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <sys/socket.h>
 #include <linux/netlink.h>
@@ -70,6 +73,12 @@
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
+
+#define RTC_FILE                 "/dev/rtc0"
+#define IPC_DEVICE_NAME          "/dev/mid_ipc"
+#define IPC_WRITE_ALARM_TO_OSNIB 0xC5
+#define ALARM_SET                1
+#define ALARM_CLEAR              0
 
 struct key_state {
     bool pending;
@@ -920,6 +929,100 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     }
 }
 
+int write_alarm_to_osnib(int mode)
+{
+    int devfd, errNo, ret;
+
+    devfd = open(IPC_DEVICE_NAME, O_RDWR);
+    if (devfd < 0) {
+        LOGE("unable to open the DEVICE %s\n", IPC_DEVICE_NAME);
+        ret = -1;
+        goto err1;
+    }
+
+    errNo = ioctl(devfd, IPC_WRITE_ALARM_TO_OSNIB, &mode);
+    if (errNo < 0) {
+        LOGE("ioctl for DEVICE %s, returns error-%d\n",
+                        IPC_DEVICE_NAME, errNo);
+        ret = -1;
+        goto err2;
+    }
+    ret = 0;
+
+err2:
+    close(devfd);
+err1:
+    return ret;
+}
+
+void *handle_rtc_alarm_event(void *arg)
+{
+    struct charger *charger = (struct charger *) arg;
+    unsigned long data;
+    int rtc_fd, ret;
+    int batt_cap;
+    struct rtc_wkalrm alarm;
+
+    write_alarm_to_osnib(ALARM_CLEAR);
+
+    rtc_fd = open(RTC_FILE, O_RDONLY, 0);
+    if (rtc_fd < 0) {
+        LOGE("Unable to open the DEVICE %s\n", RTC_FILE);
+        goto err1;
+    }
+
+    /* RTC alarm set ? */
+    ret = ioctl(rtc_fd, RTC_WKALM_RD, &alarm);
+    if (ret == -1) {
+        LOGE("ioctl(RTC_WKALM_RD) failed\n");
+        goto err2;
+    }
+
+    if (!alarm.enabled)
+        LOGI("No RTC wake-alarm set\n");
+    else {
+        LOGI("RTC wake-alarm set: %04d-%02d-%02d %02d:%02d:%02d\n",
+                alarm.time.tm_year+1900,
+                alarm.time.tm_mon+1,
+                alarm.time.tm_mday,
+                alarm.time.tm_hour,
+                alarm.time.tm_min,
+                alarm.time.tm_sec);
+
+        /* Enable alarm interrupts */
+        ret = ioctl(rtc_fd, RTC_AIE_ON, 0);
+        if (ret == -1) {
+            LOGE("rtc ioctl RTC_AIE_ON error\n");
+            goto err2;
+        }
+    }
+
+    /* This blocks until the alarm ring causes an interrupt */
+    ret = read(rtc_fd, &data, sizeof(unsigned long));
+    if (ret < 0) {
+        LOGE("rtc read error\n");
+        goto err2;
+    }
+
+    batt_cap = get_battery_capacity(charger);
+    if (batt_cap >= BOOT_BATT_MIN_CAP_THRS) {
+        LOGI("RTC alarm rang, Rebooting to MOS");
+
+        if (write_alarm_to_osnib(ALARM_SET))
+            LOGE("Error in setting alarm-flag to OSNIB");
+
+        android_reboot(ANDROID_RB_RESTART, 0, 0);
+    } else {
+        LOGI("RTC alarm rang, capacity:%d less than minimum threshold:%d, "
+             "cannot boot to MOS", batt_cap, BOOT_BATT_MIN_CAP_THRS);
+    }
+
+err2:
+    close(rtc_fd);
+err1:
+    return NULL;
+}
+
 static void wait_next_event(struct charger *charger, int64_t now)
 {
     int64_t next_event = INT64_MAX;
@@ -988,6 +1091,7 @@ int main(int argc, char **argv)
     int64_t now = curr_time_ms() - 1;
     int fd;
     int i;
+    pthread_t t;
 
     list_init(&charger->supplies);
 
@@ -1000,6 +1104,9 @@ int main(int argc, char **argv)
 
     gr_init();
     gr_font_size(&char_width, &char_height);
+
+    if (pthread_create(&t, NULL, handle_rtc_alarm_event, charger) != 0)
+        LOGE("Error in creating rtc-alarm thread\n");
 
     ev_init(input_callback, charger);
 
