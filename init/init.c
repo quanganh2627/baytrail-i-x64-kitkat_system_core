@@ -615,6 +615,7 @@ static int console_init_action(int nargs, char **args)
 }
 
 #define INTEL_MFLD_PHONE "0000"
+#define AAVA_MFLD_SALITPA "0001"
 #define INTEL_MFLD_BB15_SUFFIX '0'
 #define INTEL_MFLD_BB20_SUFFIX '1'
 #define INTEL_MFLD_OR_SUFFIX '2'
@@ -705,6 +706,8 @@ static void spid_init (void)
          */
         if (spid_prod == INTEL_MFLD_OR_SUFFIX)
             property_set("audiocomms.vp.fw_name", "vpimg_es305b-NH.bin");
+    } else if (strncmp(buf_plat, AAVA_MFLD_SALITPA, 4) == 0) {
+        rxdiv_prop_value[0]='1';
     }
     property_set("ro.spid.telephony.rxdiv", rxdiv_prop_value);
 }
