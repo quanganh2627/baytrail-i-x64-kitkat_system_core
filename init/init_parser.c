@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <ctype.h>
+#include <fnmatch.h>
 
 #include "init.h"
 #include "parser.h"
@@ -528,6 +529,32 @@ void queue_property_triggers(const char *name, const char *value)
             }
         }
     }
+}
+
+void action_for_each_property_trigger(const char *name, const char *value,
+                                      void (*func)(struct action *act))
+{
+    struct listnode *node;
+    struct action *act;
+
+    if (strncmp(name, "ro.", 3)!=0) return ;
+
+    list_for_each(node, &action_list) {
+        act = node_to_item(node, struct action, alist);
+        if (!strncmp(act->name, "property:", strlen("property:"))) {
+            const char *test = act->name + strlen("property:");
+            int name_length = strlen(name);
+
+            if (!strncmp(name, test, name_length) &&
+                    test[name_length] == '=' &&
+                    !fnmatch(test + name_length + 1, value, 0)) {
+                func(act);
+            }
+        }
+    }
+}
+void clear_action_list() {
+    list_init(&action_list);
 }
 
 void queue_all_property_triggers()
