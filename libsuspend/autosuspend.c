@@ -33,8 +33,6 @@ static int autosuspend_init(void)
         return 0;
     }
 
-    autosuspend_inited = true;
-
     autosuspend_ops = autosuspend_earlysuspend_init();
     if (autosuspend_ops) {
         goto out;
@@ -50,12 +48,12 @@ static int autosuspend_init(void)
         goto out;
     }
 
-    if (!autosuspend_ops) {
-        ALOGE("failed to initialize autosuspend\n");
-        return -1;
-    }
+    autosuspend_inited = false;
+    ALOGE("failed to initialize autosuspend\n");
+    return -1;
 
 out:
+    autosuspend_inited = true;
     ALOGV("autosuspend initialized\n");
     return 0;
 }
