@@ -303,6 +303,19 @@ static int check_perms(const char *name, unsigned int uid, unsigned int gid, cha
         }
     }
 
+    /*
+     * FIXME: This is a temporary solution to allow enabling BT TI on MR1 with the current uim module
+     * uim is launched with the bd_addr as an arg that is "uim:xx:xx:xx:xx:xx:xx"
+     * So we just look at the first 4 characters for now. Need to use a different way for passing the
+     * BD Address to UIM
+     */
+    if (strncmp(name, "uim:", 4) == 0) {
+        if ((uid == AID_BLUETOOTH) ||
+            (gid == AID_BLUETOOTH)) {
+                return 1;
+        }
+    }
+
     return 0;
 }
 
