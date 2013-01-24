@@ -199,7 +199,9 @@ static void local_socket_close(asocket *s)
 static void local_socket_destroy(asocket  *s)
 {
     apacket *p, *n;
+#if !ADB_HOST
     int exit_on_close = s->exit_on_close;
+#endif
 
     D("LS(%d): destroying fde.fd=%d\n", s->id, s->fde.fd);
 
@@ -217,11 +219,13 @@ static void local_socket_destroy(asocket  *s)
     remove_socket(s);
     free(s);
 
+#if !ADB_HOST
     if (exit_on_close) {
         D("local_socket_destroy: exiting\n");
         sleep(1);
         exit(1);
     }
+#endif
 }
 
 
