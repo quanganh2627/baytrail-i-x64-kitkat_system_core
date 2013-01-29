@@ -544,6 +544,56 @@ static void load_persistent_properties()
     persistent_properties_loaded = 1;
 }
 
+static void dmi_detect_props(void)
+{
+    char dmi[256], buf[256], path[256], *hash, *tag, *name, *toksav, allmatched;
+    char var[PROP_VALUE_MAX];
+    FILE *dmif, *cfg;
+    int ret;
+
+    /* Skip if disabled */
+    ret = property_get("ro.boot.dmi_detect", var);
+    if(!ret || strcmp(var, "1"))
+        return;
+
+    /* Fail silently (no error) on devices without DMI */
+    dmif = fopen("/sys/devices/virtual/dmi/id/modalias", "r");
+    if (!dmif || !fgets(dmi, sizeof(dmi), dmif))
+        return;
+    fclose(dmif);
+
+    /* ...or if the system filesystem lacks configuration */
+    if (!(cfg = fopen("/system/etc/dmi-machine.conf", "r")))
+        return;
+
+    while (fgets(buf, sizeof(buf), cfg)) {
+        /* snip comments */
+        if ((hash = strchr(buf, '#')))
+            *hash = 0;
+
+        /* parse line: cfg name, then a list of tags to test.  If they
+         * all match then load the config file and return (note that
+         * "no tags" means "everything matched" and can be used to
+         * load a default if needed, though that is probably best done
+         * with build.props) */
+        allmatched = 1;
+        if ((name = strtok_r(buf, " \t\v\r\n", &toksav))) {
+            while ((tag = strtok_r(NULL, " \t\v\r\n", &toksav)))
+                if (!strstr(dmi, tag))
+                    allmatched = 0;
+
+            if (allmatched) {
+                property_set("ro.sys.detected_machine", name);
+                snprintf(path, sizeof(path), "/system/etc/machine-props/%s.prop", name);
+                load_properties_from_file(path, "ro.");
+                break;
+            }
+        }
+    }
+
+    fclose(cfg);
+}
+
 void property_init(void)
 {
     init_property_area();
@@ -588,6 +638,7 @@ void start_property_service(void)
 {
     int fd;
 
+    dmi_detect_props();
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.");
