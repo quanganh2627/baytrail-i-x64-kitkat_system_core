@@ -209,9 +209,16 @@ int CodeCache::cache(  const AssemblyKeyBase& keyBase,
                  strerror(errno));
 #endif
     }
+    size_t count = mCacheData.size();
 
     pthread_mutex_unlock(&mLock);
-    return err;
+    /**** For ARM, return value is always 0 as long as cacheflush succeeds. For non-ARM(e.g. x86), err actually indicates the index
+     of the cache entry. As long as the index is within the capacity, the return value should be 0. Otherwise it's the real error.
+    *****/
+    if (err >= 0 && err < count)
+        return 0;
+    else
+        return err;
 }
 
 // ----------------------------------------------------------------------------
