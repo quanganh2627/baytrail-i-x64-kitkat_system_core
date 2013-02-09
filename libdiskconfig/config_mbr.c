@@ -314,7 +314,12 @@ find_mbr_part(struct disk_info *dinfo, const char *name)
         return NULL;
     }
 
-    num = snprintf(dev_name, MAX_NAME_LEN, "%s%d", dinfo->device, num);
+    if (strstr(dinfo->device, "mmcblk")) {
+        // dealing with devices like mmcblk0p1
+        num = snprintf(dev_name, MAX_NAME_LEN, "%sp%d", dinfo->device, num);
+    } else {
+        num = snprintf(dev_name, MAX_NAME_LEN, "%s%d", dinfo->device, num);
+    }
     if (num >= MAX_NAME_LEN) {
         ALOGE("Device name is too long?!");
         free(dev_name);
