@@ -49,6 +49,7 @@
 
 #include <sys/system_properties.h>
 
+#include "keywords.h"
 #include "devices.h"
 #include "init.h"
 #include "log.h"
@@ -60,9 +61,6 @@
 #include "util.h"
 #include "ueventd.h"
 #include "watchdogd.h"
-
-#define HW_VERSION_PROP                     "ro.spid.hardware.version"
-#define AUDIOCOMMS_PFW_CONF_FILE_PATH_PROP  "AudioComms.PFW.ConfPath"
 
 #ifdef HAVE_SELINUX
 struct selabel_handle *sehandle;
@@ -104,6 +102,8 @@ static char *console_name = "/dev/console";
 static time_t process_needs_restart;
 
 static const char *ENV[32];
+
+static void action_execute_all_setprops(struct action *act);
 
 /* add_environment - add "key=value" to the current environment */
 int add_environment(const char *key, const char *val)
@@ -432,6 +432,8 @@ void property_changed(const char *name, const char *value)
 {
     if (property_triggers_enabled)
         queue_property_triggers(name, value);
+    else
+        action_for_each_property_trigger(name, value, action_execute_all_setprops);
 }
 
 static void restart_service_if_needed(struct service *svc)
@@ -556,6 +558,20 @@ void execute_one_command(void)
     ret = cur_command->func(cur_command->nargs, cur_command->args);
     INFO("command '%s' r=%d\n", cur_command->args[0], ret);
 }
+static void action_execute_all_setprops(struct action *act)
+{
+    struct command *c;
+    c = get_first_command(act);
+    while(c)
+    {
+        if (c->func == do_setprop) {
+            int ret = c->func(c->nargs, c->args);
+        } else {
+            ERROR("error: /props.rc action %s must only have setprops commands!\n", act->name);
+        }
+        c = get_next_command(act, c);
+    }
+}
 
 static int wait_for_coldboot_done_action(int nargs, char **args)
 {
@@ -612,108 +628,6 @@ static int console_init_action(int nargs, char **args)
         }
     }
     return 0;
-}
-
-#define INTEL_MFLD_PHONE "0000"
-#define AAVA_MFLD_SALITPA "0001"
-#define INTEL_MFLD_BB15_SUFFIX '0'
-#define INTEL_MFLD_BB20_SUFFIX '1'
-#define INTEL_MFLD_OR_SUFFIX '2'
-#define INTEL_MFLD_LEX_SUFFIX '4'
-
-#define INTEL_LEX_DV_SUFFIX '4'
-
-#define INTEL_CLVT_PLATFORM "0002"
-
-static void spid_init (void)
-{
-    int fd_plat = open("/sys/spid/platform_family_id", O_RDONLY);
-    int fd_prod = open("/sys/spid/product_line_id", O_RDONLY);
-    int fd_hw = open("/sys/spid/hardware_id", O_RDONLY);
-    char buf_plat[PROP_VALUE_MAX]={'\0'};
-    char buf_prod[PROP_VALUE_MAX]={'\0'};
-    char buf_hw[PROP_VALUE_MAX]={'\0'};
-    char rxdiv_prop_value[PROP_VALUE_MAX]={'\0'};
-    char spid_prod=0;
-
-
-    if ((fd_plat >= 0) && (fd_prod >= 0)) {
-        int n_plat = read(fd_plat, buf_plat, PROP_VALUE_MAX-1);
-        int n_prod = read(fd_prod, buf_prod, PROP_VALUE_MAX-1);
-        int n_hw = read(fd_hw, buf_hw, PROP_VALUE_MAX-1);
-        close(fd_plat);
-        close(fd_prod);
-        if ((n_plat <= 0) || (n_prod <= 0) || (n_hw <= 0)) {
-            ERROR("fail to read files in /sys/spid/!\n");
-            return;
-        }
-
-    } else {
-        ERROR("fail to open files in /sys/spid/!\n");
-        return;
-    }
-
-    if (buf_plat[0] == '\0') {
-        ERROR("no spid value in /sys/spid/platform_family_id!\n");
-    }
-    if (buf_prod[0] == '\0') {
-        ERROR("no spid value in /sys/spid/product_line_id!\n");
-    }
-    if (buf_hw[0] == '\0') {
-        ERROR("no spid value in /sys/spid/hardware_id!\n");
-    }
-
-    rxdiv_prop_value[0]='0';
-
-    // Default values for those properties. Might be modified for some HW
-    property_set(AUDIOCOMMS_PFW_CONF_FILE_PATH_PROP, "/etc/parameter-framework/ParameterFrameworkConfiguration.xml");
-
-    /* True for all INTEL_MFLD_PHONE devices */
-    if (strncmp(buf_plat, INTEL_MFLD_PHONE, 4) == 0) {
-        spid_prod = buf_prod[3];
-
-        /* True on the following devices :
-         * - INTEL_MFLD_BB_15_PRO
-         * - INTEL_MFLD_BB_15_ENG
-         * - INTEL_MFLD_BB_20_ENG
-         * - INTEL_MFLD_BB_20_PRO
-         */
-        if (spid_prod == INTEL_MFLD_BB15_SUFFIX || spid_prod == INTEL_MFLD_BB20_SUFFIX) {
-            property_set("audiocomms.vp.fw_name", "vpimg_es305b-BB.bin");
-            rxdiv_prop_value[0]='1';
-        }
-
-        /* True on the following devices :
-        * - INTEL_MFLD_LEX_PRO
-        * - INTEL_MFLD_LEX_ENG
-        */
-        if (spid_prod == INTEL_MFLD_LEX_SUFFIX)
-        {
-            /* true for LEX PR, false for LEX DV */
-            ERROR("LEX : %c\n",buf_hw[3]);
-            if(buf_hw[3] < INTEL_LEX_DV_SUFFIX) {
-                property_set(HW_VERSION_PROP, "pr");
-                property_set(AUDIOCOMMS_PFW_CONF_FILE_PATH_PROP, "/etc/parameter-framework/ParameterFrameworkConfiguration_pr.xml");
-            } else {
-                property_set(HW_VERSION_PROP, "dv");
-                property_set(AUDIOCOMMS_PFW_CONF_FILE_PATH_PROP, "/etc/parameter-framework/ParameterFrameworkConfiguration_dv.xml");
-            }
-
-            rxdiv_prop_value[0]='1';
-        }
-
-        /* True on the following devices :
-         * - INTEL_MFLD_OR_PRO
-         * - INTEL_MFLD_OR_ENG
-         */
-        if (spid_prod == INTEL_MFLD_OR_SUFFIX)
-            property_set("audiocomms.vp.fw_name", "vpimg_es305b-NH.bin");
-    } else if (strncmp(buf_plat, AAVA_MFLD_SALITPA, 4) == 0) {
-        rxdiv_prop_value[0]='1';
-    } else if (strncmp(buf_plat, INTEL_CLVT_PLATFORM, 4) == 0) {
-        rxdiv_prop_value[0]='1';
-    }
-    property_set("ro.spid.telephony.rxdiv", rxdiv_prop_value);
 }
 
 static void import_kernel_nv(char *name, int for_emulator)
@@ -848,7 +762,6 @@ static void process_kernel_cmdline(void)
     import_kernel_cmdline(0, import_kernel_nv);
     if (qemu[0])
         import_kernel_cmdline(1, import_kernel_nv);
-    spid_init();
 
     /* now propogate the info given on command line to internal variables
      * used by init as well as the current required properties
@@ -1034,6 +947,9 @@ int main(int argc, char **argv)
     klog_init();
     property_init();
 
+    INFO("reading property config file\n");
+    init_parse_config_file("/props.rc");
+
     get_hardware_name(hardware, &revision);
 
     process_kernel_cmdline();
@@ -1071,6 +987,11 @@ int main(int argc, char **argv)
     if (!is_charger)
         property_load_boot_defaults();
 
+    /* Clear the init.props action list. All the properties
+     * derivation is now done. No need to overload further action_list
+     * processing
+     */
+    clear_action_list();
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");
 

@@ -207,6 +207,21 @@ fail:
     return NULL;
 }
 
+static struct write_list *
+mk_empty_ptable(void)
+{
+    struct write_list *wr;
+    static const short int magic = PC_BIOS_BOOT_SIG;
+
+    wr = alloc_wl(72);
+    if (!wr)
+        return NULL;
+    memset(wr->data, 0, 70);
+    memcpy(wr->data + 70, &magic, sizeof(magic));
+    wr->offset = 440;
+    return wr;
+}
+
 
 struct write_list *
 config_mbr(struct disk_info *dinfo)
@@ -276,6 +291,14 @@ config_mbr(struct disk_info *dinfo)
         wlist_add(&wr_list, temp_wr);
     }
 
+    /* Prepend to the write list an empty partition table to start with */
+    if ((temp_wr = mk_empty_ptable()))
+        wlist_add(&wr_list, temp_wr);
+    else {
+        ALOGE("Can't create base partition table");
+        goto fail;
+    }
+
     return wr_list;
 
 nospace:
@@ -314,7 +337,12 @@ find_mbr_part(struct disk_info *dinfo, const char *name)
         return NULL;
     }
 
-    num = snprintf(dev_name, MAX_NAME_LEN, "%s%d", dinfo->device, num);
+    if (strstr(dinfo->device, "mmcblk")) {
+        // dealing with devices like mmcblk0p1
+        num = snprintf(dev_name, MAX_NAME_LEN, "%sp%d", dinfo->device, num);
+    } else {
+        num = snprintf(dev_name, MAX_NAME_LEN, "%s%d", dinfo->device, num);
+    }
     if (num >= MAX_NAME_LEN) {
         ALOGE("Device name is too long?!");
         free(dev_name);
