@@ -373,14 +373,13 @@ enum {
                                AUDIO_DEVICE_IN_FM_RECORD |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
-    //devices not supported for codec offload
+    // devices not supported for codec offload
     AUDIO_DEVICE_OUT_NON_OFFLOAD = (AUDIO_DEVICE_OUT_ALL & ~(AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
                                  AUDIO_DEVICE_OUT_WIRED_HEADPHONE |
                                  AUDIO_DEVICE_OUT_EARPIECE)),
-    //devices supporting remote background playback in addition to foreground playback
-    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = (AUDIO_DEVICE_OUT_WIDI |
-                                        AUDIO_DEVICE_OUT_AUX_DIGITAL),
+    // device supporting remote background playback in addition to foreground playback
+    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = AUDIO_DEVICE_OUT_WIDI,
 };
 
 typedef uint32_t audio_devices_t;
