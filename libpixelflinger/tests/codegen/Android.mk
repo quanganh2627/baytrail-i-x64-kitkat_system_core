@@ -13,7 +13,7 @@ LOCAL_C_INCLUDES := \
 
 ifeq ($(TARGET_ARCH),x86)
 LOCAL_C_INCLUDES += \
-    $(TOP)/hardware/intel/apache-harmony
+    $(TOP)/vendor/intel/hardware/apache-harmony
 endif
 
 LOCAL_MODULE:= test-opengl-codegen
