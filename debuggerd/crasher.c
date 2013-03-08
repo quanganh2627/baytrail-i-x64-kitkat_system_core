@@ -74,6 +74,21 @@ int ctest()
     return 0;
 }
 
+__attribute__((noinline)) int crash3(int a) {
+   *((int*) 0xdead) = a;
+   return a*4;
+}
+
+__attribute__((noinline)) int crash2(int a) {
+   a = crash3(a) + 2;
+   return a*3;
+}
+
+__attribute__((noinline)) int crash(int a) {
+   a = crash2(a) + 1;
+   return a*2;
+}
+
 int main(int argc, char **argv)
 {
     pthread_t thr;
@@ -86,6 +101,7 @@ int main(int argc, char **argv)
         if(!strcmp(argv[1],"nostack")) crashnostack();
         if(!strcmp(argv[1],"ctest")) return ctest();
         if(!strcmp(argv[1],"exit")) exit(1);
+        if(!strcmp(arg,"crash")) return crash(42);
         if(!strcmp(argv[1],"abort")) maybeabort();
         
         pthread_attr_init(&attr);
