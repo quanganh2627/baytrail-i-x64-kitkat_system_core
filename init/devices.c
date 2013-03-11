@@ -77,6 +77,11 @@ struct uevent {
     int minor;
 };
 
+struct mod_args_ {
+    char *name;
+    char *args;
+};
+
 struct perms_ {
     char *name;
     char *attr;
@@ -84,6 +89,11 @@ struct perms_ {
     unsigned int uid;
     unsigned int gid;
     unsigned short wildcard;
+};
+
+struct mod_arg_node {
+    struct mod_args_ mod_args;
+    struct listnode plist;
 };
 
 struct perm_node {
@@ -98,6 +108,8 @@ struct platform_node {
     struct listnode list;
 };
 
+static list_declare(lmodalias);
+static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
@@ -129,6 +141,35 @@ int add_dev_perms(const char *name, const char *attr,
         list_add_tail(&sys_perms, &node->plist);
     else
         list_add_tail(&dev_perms, &node->plist);
+
+    return 0;
+}
+
+int add_mod_args(int nargs, const char *mod_name, char *args[])
+{
+    struct mod_arg_node *node = calloc(1, sizeof(*node));
+    char tmp_mod_args[1024];
+    int i = 0;
+
+    if (!node)
+        return -ENOMEM;
+
+    node->mod_args.name = strdup(mod_name);
+    if (!node->mod_args.name)
+        return -ENOMEM;
+
+    tmp_mod_args[0] = 0;
+    for ( i = 1; i < nargs; ++i) {
+        strlcat(tmp_mod_args, args[i], sizeof(tmp_mod_args));
+        strlcat(tmp_mod_args, " ", sizeof(tmp_mod_args));
+    }
+
+    node->mod_args.args = strdup(tmp_mod_args);
+
+    if (!node->mod_args.args)
+            return -ENOMEM;
+
+    list_add_tail(&lmod_args, &node->plist);
 
     return 0;
 }
@@ -191,6 +232,33 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
     *uid = 0;
     *gid = 0;
     return 0600;
+}
+
+const char *get_mod_args(const char *mod_name)
+{
+    struct listnode *node = NULL;
+    struct mod_arg_node *mod_arg_node = NULL;
+    struct mod_args_ *mod_args = NULL;
+    char * real_mod_name = NULL;
+
+    if (list_empty(&lmodalias)) {
+        parse_alias_to_list("/lib/modules/modules.alias", &lmodalias);
+    }
+
+    if (!get_module_name_from_alias(mod_name, &real_mod_name, &lmodalias))
+        mod_name = real_mod_name;
+
+    list_for_each(node, &lmod_args) {
+        mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
+        mod_args = &mod_arg_node->mod_args;
+
+
+        if (!strcmp(mod_name, mod_args->name)) {
+            return mod_args->args;
+        }
+    }
+
+    return "";
 }
 
 static void make_device(const char *path,
@@ -667,7 +735,7 @@ static void handle_deferred_module_loading()
 
         if (alias && alias->pattern) {
             INFO("deferred loading of module for %s\n", alias->pattern);
-            ret = insmod_by_dep(alias->pattern, "", NULL, 1, NULL,
+            ret = insmod_by_dep(alias->pattern, get_mod_args(alias->pattern), NULL, 1, NULL,
                     MODULES_BLKLST);
             /* if it looks like file system where these files are is not
              * ready, keep the module in defer list for retry. */
@@ -682,7 +750,7 @@ static void handle_deferred_module_loading()
 
 int module_probe(const char *modalias)
 {
-    return insmod_by_dep(modalias, "", NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
+    return insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
 }
 
 static void handle_module_loading(const char *modalias)
@@ -691,12 +759,11 @@ static void handle_module_loading(const char *modalias)
     struct module_alias_node *node;
     int ret;
 
-
     handle_deferred_module_loading();
 
     if (!modalias) return;
 
-    ret = insmod_by_dep(modalias, "", NULL, 1, NULL, MODULES_BLKLST);
+    ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
 
     if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
         node = calloc(1, sizeof(*node));
