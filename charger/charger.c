@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
+#include <linux/rtc.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,8 +30,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include <sys/socket.h>
 #include <linux/netlink.h>
@@ -40,6 +43,7 @@
 #include <cutils/list.h>
 #include <cutils/misc.h>
 #include <cutils/uevent.h>
+#include <suspend/autosuspend.h>
 
 #include "minui/minui.h"
 
@@ -61,6 +65,7 @@
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
+#define BOOT_BATT_MIN_CAP_THRS  3
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
@@ -68,6 +73,18 @@
 #define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
+
+#define TEMP_BASE_PATH          "/sys/class/thermal/thermal_zone"
+#define TEMP_SENS_TYPE          "/type"
+#define TEMP_SENS_VAL           "/temp"
+#define TEMP_MON_TYPE           "skin0"
+#define CRIT_TEMP_THRESH        64000
+
+#define RTC_FILE                 "/dev/rtc0"
+#define IPC_DEVICE_NAME          "/dev/mid_ipc"
+#define IPC_WRITE_ALARM_TO_OSNIB 0xC5
+#define ALARM_SET                1
+#define ALARM_CLEAR              0
 
 struct key_state {
     bool pending;
@@ -103,6 +120,8 @@ struct animation {
     int cur_cycle;
     int num_cycles;
 
+    int anim_thresh;
+
     /* current capacity being animated */
     int capacity;
 };
@@ -136,14 +155,29 @@ struct uevent {
 
 static struct frame batt_anim_frames[] = {
     {
+        .name = "charger/battery_crit",
+        .disp_time = 750,
+        .min_capacity = 0,
+    },
+    {
         .name = "charger/battery_0",
         .disp_time = 750,
         .min_capacity = 0,
     },
     {
+        .name = "charger/battery_0a",
+        .disp_time = 750,
+        .min_capacity = 20,
+    },
+    {
         .name = "charger/battery_1",
         .disp_time = 750,
         .min_capacity = 20,
+    },
+    {
+        .name = "charger/battery_1a",
+        .disp_time = 750,
+        .min_capacity = 40,
     },
     {
         .name = "charger/battery_2",
@@ -159,7 +193,6 @@ static struct frame batt_anim_frames[] = {
         .name = "charger/battery_4",
         .disp_time = 750,
         .min_capacity = 80,
-        .level_only = true,
     },
     {
         .name = "charger/battery_5",
@@ -641,6 +674,12 @@ static void draw_battery(struct charger *charger)
         LOGV("drawing frame #%d name=%s min_cap=%d time=%d\n",
              batt_anim->cur_frame, frame->name, frame->min_capacity,
              frame->disp_time);
+
+        if (get_battery_capacity(charger) < BOOT_BATT_MIN_CAP_THRS) {
+            struct frame *crit_frame = &batt_anim->frames[0];
+            draw_surface_centered(charger, crit_frame->surface);
+            LOGV("drawing battery_crit frame\n");
+        }
     }
 }
 
@@ -675,6 +714,7 @@ static void update_screen_state(struct charger *charger, int64_t now)
     struct animation *batt_anim = charger->batt_anim;
     int cur_frame;
     int disp_time;
+    int batt_cap;
 
     if (!batt_anim->run || now < charger->next_screen_transition)
         return;
@@ -685,6 +725,21 @@ static void update_screen_state(struct charger *charger, int64_t now)
         charger->next_screen_transition = -1;
         gr_fb_blank(true);
         LOGV("[%lld] animation done\n", now);
+
+        /* Stop at the correct-level, as animation could have
+           ended at the next level */
+        batt_cap = get_battery_capacity(charger);
+        if (batt_cap < batt_anim->frames[batt_anim->anim_thresh].min_capacity)
+            batt_anim->cur_frame = batt_anim->anim_thresh - 1;
+        else
+            batt_anim->cur_frame = batt_anim->anim_thresh;
+
+        redraw_screen(charger);
+        reset_animation(batt_anim);
+
+        if (charger->num_supplies_online != 0)
+            autosuspend_enable();
+
         return;
     }
 
@@ -692,7 +747,6 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
     /* animation starting, set up the animation */
     if (batt_anim->cur_frame == 0) {
-        int batt_cap;
         int ret;
 
         LOGV("[%lld] animation starting\n", now);
@@ -706,6 +760,11 @@ static void update_screen_state(struct charger *charger, int64_t now)
                     break;
             }
             batt_anim->cur_frame = i - 1;
+            /* Run animation only till the next segment */
+            if (i == batt_anim->num_frames)
+                batt_anim->anim_thresh = batt_anim->cur_frame;
+            else
+                batt_anim->anim_thresh = batt_anim->cur_frame + 1;
 
             /* show the first frame for twice as long */
             disp_time = batt_anim->frames[batt_anim->cur_frame].disp_time * 2;
@@ -734,24 +793,30 @@ static void update_screen_state(struct charger *charger, int64_t now)
     /* schedule next screen transition */
     charger->next_screen_transition = now + disp_time;
 
-    /* advance frame cntr to the next valid frame
+    /* advance frame cntr to the next valid frame only if we are charging
      * if necessary, advance cycle cntr, and reset frame cntr
      */
-    batt_anim->cur_frame++;
-
-    /* if the frame is used for level-only, that is only show it when it's
-     * the current level, skip it during the animation.
-     */
-    while (batt_anim->cur_frame < batt_anim->num_frames &&
-           batt_anim->frames[batt_anim->cur_frame].level_only)
+    if (charger->num_supplies_online != 0) {
         batt_anim->cur_frame++;
-    if (batt_anim->cur_frame >= batt_anim->num_frames) {
-        batt_anim->cur_cycle++;
-        batt_anim->cur_frame = 0;
+
+        /* if the frame is used for level-only, that is only show it when it's
+         * the current level, skip it during the animation.
+         */
+        while (batt_anim->cur_frame < batt_anim->num_frames &&
+               batt_anim->frames[batt_anim->cur_frame].level_only)
+            batt_anim->cur_frame++;
+        if (batt_anim->cur_frame > batt_anim->anim_thresh) {
+            batt_anim->cur_cycle++;
+            batt_anim->cur_frame = 0;
 
         /* don't reset the cycle counter, since we use that as a signal
          * in a test above to check if animation is over
          */
+        }
+    } else {
+        /* Stop animating if we're not charging */
+        batt_anim->cur_frame = 0;
+        batt_anim->cur_cycle++;
     }
 }
 
@@ -814,14 +879,20 @@ static void process_key(struct charger *charger, int code, int64_t now)
         if (key->down) {
             int64_t reboot_timeout = key->timestamp + POWER_ON_KEY_TIME;
             if (now >= reboot_timeout) {
-                LOGI("[%lld] rebooting\n", now);
-                android_reboot(ANDROID_RB_RESTART, 0, 0);
+                if (get_battery_capacity(charger) >= BOOT_BATT_MIN_CAP_THRS) {
+                    LOGI("[%lld] rebooting\n", now);
+                    android_reboot(ANDROID_RB_RESTART, 0, 0);
+                } else {
+                    LOGI("[%lld] ignore power-button press, battery level "
+                            "less than minimum\n", now);
+                }
             } else {
                 /* if the key is pressed but timeout hasn't expired,
                  * make sure we wake up at the right-ish time to check
                  */
                 set_next_key_check(charger, key, POWER_ON_KEY_TIME);
             }
+            autosuspend_disable();
         } else {
             /* if the power key got released, force screen state cycle */
             if (key->pending)
@@ -844,6 +915,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
     if (charger->num_supplies_online == 0) {
         if (charger->next_pwr_check == -1) {
+            autosuspend_disable();
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
             LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
@@ -861,6 +933,164 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
         }
         charger->next_pwr_check = -1;
     }
+}
+
+static int get_temp_int(void)
+{
+    int sensor_count = 0;
+    char buf[256];
+    FILE *temp_fd;
+    static int ret = -1;
+
+    /* if the sysfs path is found already, just return with value */
+    if (ret != -1)
+        return ret;
+
+    while (true) {
+        sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+
+        temp_fd = fopen(buf, "r");
+        if (temp_fd == NULL) {
+            ret = -1;
+            break;
+        } else {
+            memset(buf, 0, sizeof(buf));
+            fseek(temp_fd, 0, SEEK_SET);
+            fscanf(temp_fd, "%s\n", buf);
+            if (!strcmp(buf, TEMP_MON_TYPE)) {
+                ret = sensor_count;
+                fclose(temp_fd);
+                break;
+            }
+        }
+        sensor_count++;
+    }
+
+    return ret;
+}
+
+static void handle_temperature_state(struct charger *charger)
+{
+    int temp, sensor_type;
+    FILE *temp_fd;
+    char buf[256];
+
+    sensor_type = get_temp_int();
+    if (sensor_type == -1)
+        return;
+
+    sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_type, TEMP_SENS_VAL);
+
+    temp_fd = fopen(buf, "r");
+    if (temp_fd == NULL) {
+        LOGE("Unable to open file %s\n", buf);
+        return;
+    }
+
+    fseek(temp_fd, 0, SEEK_SET);
+    fscanf(temp_fd, "%d\n", &temp);
+    if (temp >= CRIT_TEMP_THRESH) {
+        autosuspend_disable();
+        LOGI("Temperature(%d) is higher than threshold(%d), "
+             "shutting down system.\n", temp, CRIT_TEMP_THRESH);
+        system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
+        android_reboot(ANDROID_RB_POWEROFF, 0, 0);
+    }
+    fclose(temp_fd);
+}
+
+int write_alarm_to_osnib(int mode)
+{
+    int devfd, errNo, ret;
+
+    devfd = open(IPC_DEVICE_NAME, O_RDWR);
+    if (devfd < 0) {
+        LOGE("unable to open the DEVICE %s\n", IPC_DEVICE_NAME);
+        ret = -1;
+        goto err1;
+    }
+
+    errNo = ioctl(devfd, IPC_WRITE_ALARM_TO_OSNIB, &mode);
+    if (errNo < 0) {
+        LOGE("ioctl for DEVICE %s, returns error-%d\n",
+                        IPC_DEVICE_NAME, errNo);
+        ret = -1;
+        goto err2;
+    }
+    ret = 0;
+
+err2:
+    close(devfd);
+err1:
+    return ret;
+}
+
+void *handle_rtc_alarm_event(void *arg)
+{
+    struct charger *charger = (struct charger *) arg;
+    unsigned long data;
+    int rtc_fd, ret;
+    int batt_cap;
+    struct rtc_wkalrm alarm;
+
+    write_alarm_to_osnib(ALARM_CLEAR);
+
+    rtc_fd = open(RTC_FILE, O_RDONLY, 0);
+    if (rtc_fd < 0) {
+        LOGE("Unable to open the DEVICE %s\n", RTC_FILE);
+        goto err1;
+    }
+
+    /* RTC alarm set ? */
+    ret = ioctl(rtc_fd, RTC_WKALM_RD, &alarm);
+    if (ret == -1) {
+        LOGE("ioctl(RTC_WKALM_RD) failed\n");
+        goto err2;
+    }
+
+    if (!alarm.enabled)
+        LOGI("No RTC wake-alarm set\n");
+    else {
+        LOGI("RTC wake-alarm set: %04d-%02d-%02d %02d:%02d:%02d\n",
+                alarm.time.tm_year+1900,
+                alarm.time.tm_mon+1,
+                alarm.time.tm_mday,
+                alarm.time.tm_hour,
+                alarm.time.tm_min,
+                alarm.time.tm_sec);
+
+        /* Enable alarm interrupts */
+        ret = ioctl(rtc_fd, RTC_AIE_ON, 0);
+        if (ret == -1) {
+            LOGE("rtc ioctl RTC_AIE_ON error\n");
+            goto err2;
+        }
+    }
+
+    /* This blocks until the alarm ring causes an interrupt */
+    ret = read(rtc_fd, &data, sizeof(unsigned long));
+    if (ret < 0) {
+        LOGE("rtc read error\n");
+        goto err2;
+    }
+
+    batt_cap = get_battery_capacity(charger);
+    if (batt_cap >= BOOT_BATT_MIN_CAP_THRS) {
+        LOGI("RTC alarm rang, Rebooting to MOS");
+
+        if (write_alarm_to_osnib(ALARM_SET))
+            LOGE("Error in setting alarm-flag to OSNIB");
+
+        android_reboot(ANDROID_RB_RESTART, 0, 0);
+    } else {
+        LOGI("RTC alarm rang, capacity:%d less than minimum threshold:%d, "
+             "cannot boot to MOS", batt_cap, BOOT_BATT_MIN_CAP_THRS);
+    }
+
+err2:
+    close(rtc_fd);
+err1:
+    return NULL;
 }
 
 static void wait_next_event(struct charger *charger, int64_t now)
@@ -914,6 +1144,7 @@ static void event_loop(struct charger *charger)
         LOGV("[%lld] event_loop()\n", now);
         handle_input_state(charger, now);
         handle_power_supply_state(charger, now);
+        handle_temperature_state(charger);
 
         /* do screen update last in case any of the above want to start
          * screen transitions (animations, etc)
@@ -931,6 +1162,7 @@ int main(int argc, char **argv)
     int64_t now = curr_time_ms() - 1;
     int fd;
     int i;
+    pthread_t t;
 
     list_init(&charger->supplies);
 
@@ -943,6 +1175,9 @@ int main(int argc, char **argv)
 
     gr_init();
     gr_font_size(&char_width, &char_height);
+
+    if (pthread_create(&t, NULL, handle_rtc_alarm_event, charger) != 0)
+        LOGE("Error in creating rtc-alarm thread\n");
 
     ev_init(input_callback, charger);
 
@@ -983,6 +1218,7 @@ int main(int argc, char **argv)
     charger->next_key_check = -1;
     charger->next_pwr_check = -1;
     reset_animation(charger->batt_anim);
+    autosuspend_disable();
     kick_animation(charger->batt_anim);
 
     event_loop(charger);
