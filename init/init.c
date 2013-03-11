@@ -49,7 +49,6 @@
 
 #include <sys/system_properties.h>
 
-#include "keywords.h"
 #include "devices.h"
 #include "init.h"
 #include "log.h"
@@ -102,8 +101,6 @@ static char *console_name = "/dev/console";
 static time_t process_needs_restart;
 
 static const char *ENV[32];
-
-static void action_execute_all_setprops(struct action *act);
 
 /* add_environment - add "key=value" to the current environment */
 int add_environment(const char *key, const char *val)
@@ -432,8 +429,6 @@ void property_changed(const char *name, const char *value)
 {
     if (property_triggers_enabled)
         queue_property_triggers(name, value);
-    else
-        action_for_each_property_trigger(name, value, action_execute_all_setprops);
 }
 
 static void restart_service_if_needed(struct service *svc)
@@ -558,20 +553,6 @@ void execute_one_command(void)
     ret = cur_command->func(cur_command->nargs, cur_command->args);
     INFO("command '%s' r=%d\n", cur_command->args[0], ret);
 }
-static void action_execute_all_setprops(struct action *act)
-{
-    struct command *c;
-    c = get_first_command(act);
-    while(c)
-    {
-        if (c->func == do_setprop) {
-            int ret = c->func(c->nargs, c->args);
-        } else {
-            ERROR("error: /props.rc action %s must only have setprops commands!\n", act->name);
-        }
-        c = get_next_command(act, c);
-    }
-}
 
 static int wait_for_coldboot_done_action(int nargs, char **args)
 {
@@ -669,38 +650,6 @@ static void import_kernel_nv(char *name, int for_emulator)
     }
 }
 
-static void boardid_init (void)
-{
-    int fd = open("/proc/boardid", O_RDONLY);
-    char buf[PROP_VALUE_MAX]={'\0'};
-    char bid[PROP_VALUE_MAX]={'\0'};
-
-    if (fd >= 0) {
-        int n=read(fd, buf, PROP_VALUE_MAX-1);
-        close(fd);
-
-        if (n <= 0){
-            ERROR("fail to read /proc/boardid!\n");
-            return;
-        }
-    } else {
-        ERROR("fail to open /proc/boardid!\n");
-        return;
-    }
-
-    sscanf(buf, "boardid=%91s", bid);
-
-    if (bid[0] == '\0') {
-        ERROR("no bid value in /proc/boardid!\n");
-    }
-
-    property_set("ro.board.id", bid);
-
-    if (strncmp(bid, "pr3", 3) == 0) {
-        property_set("ro.product.model",  "mfld_pr3");
-    }
-}
-
 static void export_kernel_boot_props(void)
 {
     char tmp[PROP_VALUE_MAX];
@@ -746,8 +695,6 @@ static void export_kernel_boot_props(void)
         property_set("ro.factorytest", "2");
     else
         property_set("ro.factorytest", "0");
-
-    boardid_init();
 }
 
 static void process_kernel_cmdline(void)
@@ -777,18 +724,6 @@ static int property_service_init_action(int nargs, char **args)
      * that /data/local.prop cannot interfere with them.
      */
     start_property_service();
-    return 0;
-}
-
-static int personality_init_action(int nargs, char **args)
-{
-    const char *pval;
-    pval = property_get("ro.config.personality");
-    if (pval && !strcmp(pval, "compat_layout")) {
-        int old_personality;
-        old_personality = personality((unsigned long)-1);
-        personality(old_personality | ADDR_COMPAT_LAYOUT);
-    }
     return 0;
 }
 
@@ -910,11 +845,7 @@ int main(int argc, char **argv)
     int keychord_fd_init = 0;
     bool is_charger = false;
 
-    /* If we are called as 'modprobe' command, we run as a
-     * standalone executable and reuse ueventd's logic to do the job.
-     */
-    if (!strcmp(basename(argv[0]), "ueventd")
-            || !strcmp(basename(argv[0]), "modprobe"))
+    if (!strcmp(basename(argv[0]), "ueventd"))
         return ueventd_main(argc, argv);
 
     if (!strcmp(basename(argv[0]), "watchdogd"))
@@ -950,9 +881,6 @@ int main(int argc, char **argv)
     open_devnull_stdio();
     klog_init();
     property_init();
-
-    INFO("reading property config file\n");
-    init_parse_config_file("/props.rc");
 
     get_hardware_name(hardware, &revision);
 
@@ -991,11 +919,6 @@ int main(int argc, char **argv)
     if (!is_charger)
         property_load_boot_defaults();
 
-    /* Clear the init.props action list. All the properties
-     * derivation is now done. No need to overload further action_list
-     * processing
-     */
-    clear_action_list();
     INFO("reading config file\n");
     init_parse_config_file("/init.rc");
 
@@ -1017,7 +940,6 @@ int main(int argc, char **argv)
     }
 
     queue_builtin_action(property_service_init_action, "property_service_init");
-    queue_builtin_action(personality_init_action, "personality_init");
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 

@@ -7,44 +7,26 @@ include $(CLEAR_VARS)
 
 include $(CLEAR_VARS)
 PIXELFLINGER_SRC_FILES:= \
+    codeflinger/ARMAssemblerInterface.cpp \
+    codeflinger/ARMAssemblerProxy.cpp \
+    codeflinger/ARMAssembler.cpp \
     codeflinger/CodeCache.cpp \
-    tinyutils/SharedBuffer.cpp \
-    tinyutils/VectorImpl.cpp \
-    format.cpp \
-    clear.cpp \
-    raster.cpp \
-    buffer.cpp \
-    scanline.cpp \
-    fixed.cpp \
-    picker.cpp \
-    pixelflinger.cpp \
-    trap.cpp
-
-ifeq ($(TARGET_ARCH),arm)
-PIXELFLINGER_SRC_FILES += codeflinger/arm/ARMAssemblerInterface.cpp \
-    codeflinger/arm/ARMAssemblerProxy.cpp \
-    codeflinger/arm/ARMAssembler.cpp \
-    codeflinger/arm/GGLAssembler.cpp \
-    codeflinger/arm/load_store.cpp \
-    codeflinger/arm/blending.cpp \
-    codeflinger/arm/texturing.cpp \
-    codeflinger/arm/disassem.c
-endif
-
-ifeq ($(TARGET_ARCH),x86)
-
-PIXELFLINGER_SRC_FILES +=  \
-    codeflinger/x86/X86Assembler.cpp \
-    codeflinger/x86/GGLX86Assembler.cpp \
-    codeflinger/x86/load_store.cpp \
-    codeflinger/x86/blending.cpp \
-    codeflinger/x86/texturing.cpp
-
-LOCAL_C_INCLUDES := \
-    $(TOP)/hardware/intel/apache-harmony
-
-LOCAL_STATIC_LIBRARIES += libenc
-endif
+    codeflinger/GGLAssembler.cpp \
+    codeflinger/load_store.cpp \
+    codeflinger/blending.cpp \
+    codeflinger/texturing.cpp \
+    codeflinger/disassem.c \
+	tinyutils/SharedBuffer.cpp \
+	tinyutils/VectorImpl.cpp \
+	fixed.cpp.arm \
+	picker.cpp.arm \
+	pixelflinger.cpp.arm \
+	trap.cpp.arm \
+	scanline.cpp.arm \
+	format.cpp \
+	clear.cpp \
+	raster.cpp \
+	buffer.cpp
 
 ifeq ($(TARGET_ARCH),arm)
 ifeq ($(TARGET_ARCH_VERSION),armv7-a)
@@ -101,11 +83,6 @@ include $(CLEAR_VARS)
 LOCAL_MODULE:= libpixelflinger_static
 LOCAL_SRC_FILES := $(PIXELFLINGER_SRC_FILES)
 LOCAL_CFLAGS := $(PIXELFLINGER_CFLAGS) 
-ifeq ($(TARGET_ARCH),x86)
-LOCAL_C_INCLUDES := \
-    $(TOP)/hardware/intel/apache-harmony
-LOCAL_STATIC_LIBRARIES += libenc
-endif
 include $(BUILD_STATIC_LIBRARY)
 
 

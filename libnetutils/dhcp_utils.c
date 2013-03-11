@@ -111,7 +111,7 @@ static int fill_ip_info(const char *interface,
     property_get(prop_name, server, NULL);
 
     //TODO: Handle IPv6 when we change system property usage
-    if (strlen(gateway) == 0 || strcmp(gateway, "0.0.0.0") == 0) {
+    if (strcmp(gateway, "0.0.0.0") == 0) {
         //DHCP server is our best bet as gateway
         strncpy(gateway, server, PROPERTY_VALUE_MAX);
     }

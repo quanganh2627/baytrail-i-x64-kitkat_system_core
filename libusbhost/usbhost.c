@@ -33,7 +33,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <stddef.h>
 
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -59,14 +58,8 @@
 // I don't know why this isn't in a kernel header
 #define MAX_USBFS_BUFFER_SIZE   16384
 
-#define MAX_USBFS_WD_COUNT      10
-
 struct usb_host_context {
-    int                         fd;
-    usb_device_added_cb         cb_added;
-    usb_device_removed_cb       cb_removed;
-    void                        *data;
-    int                         wds[MAX_USBFS_WD_COUNT];
+    int fd;
 };
 
 struct usb_device {
@@ -173,100 +166,6 @@ void usb_host_cleanup(struct usb_host_context *context)
     free(context);
 }
 
-int usb_host_get_fd(struct usb_host_context *context)
-{
-    return context->fd;
-} /* usb_host_get_fd() */
-
-int usb_host_load(struct usb_host_context *context,
-                  usb_device_added_cb added_cb,
-                  usb_device_removed_cb removed_cb,
-                  usb_discovery_done_cb discovery_done_cb,
-                  void *client_data)
-{
-    char path[100];
-    int i, ret, done = 0;
-
-    D("Created device discovery thread\n");
-    context->cb_added = added_cb;
-    context->cb_removed = removed_cb;
-    context->data = client_data;
-
-    /* watch for files added and deleted within USB_FS_DIR */
-
-    /* watch the root for new subdirectories */
-    context->wds[0] = inotify_add_watch(context->fd, USB_FS_DIR, IN_CREATE | IN_DELETE);
-    if (context->wds[0] < 0) {
-        fprintf(stderr, "inotify_add_watch failed\n");
-        if (discovery_done_cb)
-            discovery_done_cb(client_data);
-        return -1;
-    }
-
-    /* watch existing subdirectories of USB_FS_DIR */
-    for (i = 1; i < MAX_USBFS_WD_COUNT; i++) {
-        snprintf(path, sizeof(path), "%s/%03d", USB_FS_DIR, i);
-        ret = inotify_add_watch(context->fd, path, IN_CREATE | IN_DELETE);
-        if (ret > 0)
-            context->wds[i] = ret;
-    }
-
-    /* check for existing devices first, after we have inotify set up */
-    done = find_existing_devices(added_cb, client_data);
-    if (discovery_done_cb)
-        done |= discovery_done_cb(client_data);
-
-    return done;
-} /* usb_host_load() */
-
-int usb_host_read_event(struct usb_host_context *context)
-{
-    struct inotify_event* event;
-    char event_buf[512];
-    char path[100];
-    int i, ret, done = 0;
-    int j, event_size;
-    int wd;
-
-    ret = read(context->fd, event_buf, sizeof(event_buf));
-    if (ret >= (int)sizeof(struct inotify_event)) {
-        event = (struct inotify_event *)event_buf;
-        wd = event->wd;
-        if (wd == context->wds[0]) {
-            i = atoi(event->name);
-            snprintf(path, sizeof(path), "%s/%s", USB_FS_DIR, event->name);
-            D("new subdirectory %s: index: %d\n", path, i);
-            if (i > 0 && i < MAX_USBFS_WD_COUNT) {
-                ret = inotify_add_watch(context->fd, path, IN_CREATE | IN_DELETE);
-                if (ret > 0)
-                    context->wds[i] = ret;
-            }
-        } else {
-            for (i = 1; (i < MAX_USBFS_WD_COUNT) && !done; i++) {
-                if (wd == context->wds[i]) {
-                    j = 0;
-                    while ( j < ret ) {
-                        /*Parse events*/
-                        event = (struct inotify_event *)&event_buf[j];
-                        event_size = offsetof (struct inotify_event, name) + event->len;
-                        j += event_size;
-                        snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
-                        if (event->mask == IN_CREATE) {
-                            D("new device %s\n", path);
-                            done = context->cb_added(path, context->data);
-                        } else if (event->mask == IN_DELETE) {
-                            D("gone device %s\n", path);
-                            done = context->cb_removed(path, context->data);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return done;
-} /* usb_host_read_event() */
-
 void usb_host_run(struct usb_host_context *context,
                   usb_device_added_cb added_cb,
                   usb_device_removed_cb removed_cb,
@@ -278,7 +177,6 @@ void usb_host_run(struct usb_host_context *context,
     char path[100];
     int i, ret, done = 0;
     int wd, wdd, wds[10];
-    int j, event_size = 0;
     int wd_count = sizeof(wds) / sizeof(wds[0]);
 
     D("Created device discovery thread\n");
@@ -341,20 +239,13 @@ void usb_host_run(struct usb_host_context *context,
             } else {
                 for (i = 1; i < wd_count && !done; i++) {
                     if (wd == wds[i]) {
-                        j = 0;
-                        while ( j < ret ) {
-                            /*Parse events*/
-                            event = (struct inotify_event *)&event_buf[j];
-                            event_size = offsetof (struct inotify_event, name) + event->len;
-                            j += event_size;
-                            snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
-                            if (event->mask == IN_CREATE) {
-                                D("new device %s\n", path);
-                                done = added_cb(path, client_data);
-                            } else if (event->mask == IN_DELETE) {
-                                D("gone device %s\n", path);
-                                done = removed_cb(path, client_data);
-                            }
+                        snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
+                        if (event->mask == IN_CREATE) {
+                            D("new device %s\n", path);
+                            done = added_cb(path, client_data);
+                        } else if (event->mask == IN_DELETE) {
+                            D("gone device %s\n", path);
+                            done = removed_cb(path, client_data);
                         }
                     }
                 }

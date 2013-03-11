@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/arm/ARMAssembler.cpp
+/* libs/pixelflinger/codeflinger/ARMAssembler.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -28,9 +28,9 @@
 
 #include <private/pixelflinger/ggl_context.h>
 
-#include "codeflinger/arm/ARMAssembler.h"
+#include "codeflinger/ARMAssembler.h"
 #include "codeflinger/CodeCache.h"
-#include "codeflinger/arm/disassem.h"
+#include "codeflinger/disassem.h"
 
 // ----------------------------------------------------------------------------
 

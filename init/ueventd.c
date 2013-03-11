@@ -21,8 +21,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <signal.h>
-#include <libgen.h>
-#include <errno.h>
+
 #include <private/android_filesystem_config.h>
 
 #include "ueventd.h"
@@ -53,30 +52,6 @@ int ueventd_main(int argc, char **argv)
     struct pollfd ufd;
     int nr;
     char tmp[32];
-
-    /* kernel will launch a program in user space to load
-     * modules, by default it is modprobe.
-     * Kernel doesn't send module parameters, so we don't
-     * need to support them.
-     * No deferred loading in this case.
-     */
-    if (!strcmp(basename(argv[0]), "modprobe")) {
-        if (argc >= 4
-                && argv[3] != NULL
-                && *argv[3] != '\0') {
-            uid_t uid;
-
-            /* We only accept requests from root user (kernel) */
-            uid = getuid();
-            if (uid)
-                return -EPERM;
-
-            return module_probe(argv[3]);
-        } else {
-            /* modprobe is called without enough arguments */
-            return -EINVAL;
-        }
-    }
 
     /*
      * init sets the umask to 077 for forked processes. We need to
@@ -140,7 +115,7 @@ void set_device_permission(int nargs, char **args)
     mode_t perm;
     uid_t uid;
     gid_t gid;
-    int wildcard = 0;
+    int prefix = 0;
     char *endptr;
     int ret;
     char *tmp = 0;
@@ -172,8 +147,10 @@ void set_device_permission(int nargs, char **args)
             asprintf(&tmp, "/dev/mtd/mtd%d", n);
         name = tmp;
     } else {
-        if (strchr(name, '*')) {
-            wildcard = 1;
+        int len = strlen(name);
+        if (name[len - 1] == '*') {
+            prefix = 1;
+            name[len - 1] = '\0';
         }
     }
 
@@ -200,6 +177,6 @@ void set_device_permission(int nargs, char **args)
     }
     gid = ret;
 
-    add_dev_perms(name, attr, perm, uid, gid, wildcard);
+    add_dev_perms(name, attr, perm, uid, gid, prefix);
     free(tmp);
 }
