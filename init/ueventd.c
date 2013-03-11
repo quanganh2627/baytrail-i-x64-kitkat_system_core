@@ -203,3 +203,18 @@ void set_device_permission(int nargs, char **args)
     add_dev_perms(name, attr, perm, uid, gid, wildcard);
     free(tmp);
 }
+
+void set_module_args(int nargs, char **args)
+{
+    char *mod_name;
+
+    if (nargs == 0)
+        return;
+
+    if (args[0][0] == '#')
+        return;
+
+    mod_name = args[0] + 4;
+
+    add_mod_args(nargs, mod_name, args);
+}
