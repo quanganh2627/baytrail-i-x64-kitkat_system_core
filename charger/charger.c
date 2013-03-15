@@ -964,8 +964,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
 static int get_temp_int(void)
 {
     int sensor_count = 0;
-    char buf[256];
-    FILE *temp_fd;
+    char path[256], buf[256];
     static int ret = -1;
 
     /* if the sysfs path is found already, just return with value */
@@ -973,19 +972,15 @@ static int get_temp_int(void)
         return ret;
 
     while (true) {
-        sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+        snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
 
-        temp_fd = fopen(buf, "r");
-        if (temp_fd == NULL) {
-            ret = -1;
+        memset(buf, 0, sizeof(buf));
+        ret = read_file(path, buf, sizeof(buf));
+        if (ret < 0) {
             break;
         } else {
-            memset(buf, 0, sizeof(buf));
-            fseek(temp_fd, 0, SEEK_SET);
-            fscanf(temp_fd, "%s\n", buf);
             if (!strcmp(buf, TEMP_MON_TYPE)) {
                 ret = sensor_count;
-                fclose(temp_fd);
                 break;
             }
         }
@@ -998,23 +993,21 @@ static int get_temp_int(void)
 static void handle_temperature_state(struct charger *charger)
 {
     int temp, sensor_type;
-    FILE *temp_fd;
-    char buf[256];
+    int ret;
+    char path[256];
 
     sensor_type = get_temp_int();
-    if (sensor_type == -1)
+    if (sensor_type < 0)
         return;
 
-    sprintf(buf, "%s%d%s", TEMP_BASE_PATH, sensor_type, TEMP_SENS_VAL);
+    snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_type, TEMP_SENS_VAL);
 
-    temp_fd = fopen(buf, "r");
-    if (temp_fd == NULL) {
-        LOGE("Unable to open file %s\n", buf);
+    ret = read_file_int(path, &temp);
+    if (ret < 0) {
+        LOGE("Unable to open/read file %s\n", path);
         return;
     }
 
-    fseek(temp_fd, 0, SEEK_SET);
-    fscanf(temp_fd, "%d\n", &temp);
     if (temp >= CRIT_TEMP_THRESH) {
         autosuspend_disable();
         LOGI("Temperature(%d) is higher than threshold(%d), "
@@ -1022,7 +1015,6 @@ static void handle_temperature_state(struct charger *charger)
         system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
         android_reboot(ANDROID_RB_POWEROFF, 0, 0);
     }
-    fclose(temp_fd);
 }
 
 int write_alarm_to_osnib(int mode)
