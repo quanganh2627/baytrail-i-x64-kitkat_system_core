@@ -86,6 +86,8 @@
 #define ALARM_SET                1
 #define ALARM_CLEAR              0
 
+#define INVALID_BATT_MODEL "UNKNOWN"
+
 struct key_state {
     bool pending;
     bool down;
@@ -99,6 +101,7 @@ struct power_supply {
     bool online;
     bool valid;
     char cap_path[PATH_MAX];
+    char model_path[PATH_MAX];
 };
 
 struct frame {
@@ -341,6 +344,24 @@ static int get_battery_capacity(struct charger *charger)
     return batt_cap;
 }
 
+static int is_battery_valid(struct charger *charger)
+{
+    int ret;
+    char model_name[32];
+
+    if (!charger->battery)
+        return -1;
+
+    ret = read_file(charger->battery->model_path, model_name, sizeof(model_name));
+    if (ret < 0)
+        return -1;
+
+    if (!strncmp(model_name, INVALID_BATT_MODEL, strlen(INVALID_BATT_MODEL)))
+        return 0;
+    else
+        return 1;
+}
+
 static struct power_supply *find_supply(struct charger *charger,
                                         const char *name)
 {
@@ -369,6 +390,8 @@ static struct power_supply *add_supply(struct charger *charger,
     strlcpy(supply->type, type, sizeof(supply->type));
     snprintf(supply->cap_path, sizeof(supply->cap_path),
              "/sys/%s/capacity", path);
+    snprintf(supply->model_path, sizeof(supply->model_path),
+             "/sys/%s/model_name", path);
     supply->online = online;
     list_add_tail(&charger->supplies, &supply->list);
     charger->num_supplies++;
@@ -690,7 +713,8 @@ static void redraw_screen(struct charger *charger)
     clear_screen();
 
     /* try to display *something* */
-    if (batt_anim->capacity < 0 || batt_anim->num_frames == 0)
+    if (batt_anim->capacity < 0 || batt_anim->num_frames == 0
+        || !is_battery_valid(charger))
         draw_unknown(charger);
     else
         draw_battery(charger);
@@ -913,14 +937,16 @@ static void handle_input_state(struct charger *charger, int64_t now)
 
 static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
-    if (charger->num_supplies_online == 0) {
+    if (charger->num_supplies_online == 0 || !is_battery_valid(charger)) {
         if (charger->next_pwr_check == -1) {
             autosuspend_disable();
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
-            LOGI("[%lld] device unplugged: shutting down in %lld (@ %lld)\n",
+            LOGI("[%lld] device unplugged or invalid battery: shutting down in %lld (@ %lld)\n",
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
             LOGI("[%lld] shutting down\n", now);
+            if (!is_battery_valid(charger))
+                system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
             android_reboot(ANDROID_RB_POWEROFF, 0, 0);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
