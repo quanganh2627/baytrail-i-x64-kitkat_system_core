@@ -456,13 +456,13 @@ void handle_property_set_fd()
     /* Check socket options here */
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
-        ERROR("Unable to recieve socket options\n");
+        ERROR("Unable to receive socket options\n");
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size recieved: %d expected: %d errno: %d\n",
+        ERROR("sys_prop: mis-match msg size received: %d expected: %d errno: %d\n",
               r, sizeof(prop_msg), errno);
         close(s);
         return;
