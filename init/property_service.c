@@ -353,7 +353,10 @@ int property_set(const char *name, const char *value)
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
-        if(!strncmp(name, "ro.", 3)) return -1;
+        if(!strncmp(name, "ro.", 3)) {
+            ERROR("sys_prop: unable to set read only property %s\n", name);
+            return -1;
+        }
 
         pa = __system_property_area__;
         update_prop_info(pi, value, valuelen);
