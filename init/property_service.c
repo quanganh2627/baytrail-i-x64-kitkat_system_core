@@ -361,7 +361,18 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     } else {
         pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) return -1;
+        if(pa->count == PA_COUNT_MAX) {
+            int i;
+            ERROR("sys_prop: unable to set property %s: maximum number of property reached\n", name);
+
+            ERROR("sys_prop: properties dump:\n");
+            for (i = 0; i < PA_COUNT_MAX; i++) {
+                pi = TOC_TO_INFO(pa, pa->toc[i]);
+
+                ERROR("sys_prop:\t[%s]: [%s]\n", pi->name, pi->value);
+            }
+            return -1;
+        }
 
         pi = pa_info_array + pa->count;
         pi->serial = (valuelen << 24);
