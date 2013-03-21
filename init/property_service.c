@@ -364,9 +364,10 @@ int property_set(const char *name, const char *value)
     int namelen = strlen(name);
     int valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX) return -1;
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    if(namelen < 1) return -1;
+    if(namelen >= PROP_NAME_MAX || valuelen >= PROP_VALUE_MAX || namelen < 1) {
+        ERROR("sys_prop: invalid property %s[%d] %s[%d]\n", name, namelen, value, valuelen);
+        return -1;
+    }
 
     pi = (prop_info*) __system_property_find(name);
 
