@@ -405,7 +405,8 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_FAST = 0x4,       // output supports "fast tracks",
                                         // defined elsewhere
     AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
-    AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10 // Use compress offload in DOT
+    AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10, // Use compress offload in DOT
+    AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x20 // used for remote background playback
 } audio_output_flags_t;
 
 static inline bool audio_is_output_device(audio_devices_t device)

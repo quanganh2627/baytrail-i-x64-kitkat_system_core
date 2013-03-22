@@ -33,6 +33,8 @@
 #include <sys/un.h>
 #include <sys/personality.h>
 
+#include <linux/kd.h>
+
 #ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -589,6 +591,31 @@ static int keychord_init_action(int nargs, char **args)
     return 0;
 }
 
+/*  vt_set_mode_tg - Ensure console is set to graphics (not text) mode.
+    This is important because it bypasses the text mode screen blanking
+    timeout.
+    */
+static int vt_set_mode_tg(int graphics)
+{
+    int fd;
+    int r;
+    unsigned int uival;
+
+    fd = open("/dev/tty0", O_RDWR | O_SYNC);
+    if (fd < 0)
+    {
+	ERROR("Failed opening /dev/tty0\n");
+        return -1;
+    }
+    r = ioctl(fd, KDGETMODE, &uival);
+    if ((r >= 0) && (uival != KD_GRAPHICS))
+	r = ioctl(fd, KDSETMODE, (void*) (graphics ? KD_GRAPHICS : KD_TEXT));
+    if (r < 0)
+	ERROR("Failed setting /dev/tty0 mode\n");
+    close(fd);
+    return r;
+}
+
 static int console_init_action(int nargs, char **args)
 {
     int fd;
@@ -627,6 +654,9 @@ static int console_init_action(int nargs, char **args)
             close(fd);
         }
     }
+
+    vt_set_mode_tg(1);
+
     return 0;
 }
 
