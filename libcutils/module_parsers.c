@@ -182,12 +182,10 @@ void free_alias_list(struct listnode *head)
     list_for_each_safe(node, next, head)
     {
         alias = node_to_item(node, struct module_alias_node, list);
-        if (alias) {
-            free(alias->pattern);
-            free(alias->name);
-            list_remove(node);
-            free(alias);
-        }
+        free(alias->pattern);
+        free(alias->name);
+        list_remove(node);
+        free(alias);
     }
 }
 
@@ -201,11 +199,9 @@ void free_black_list(struct listnode *head)
     list_for_each_safe(node, next, head)
     {
         black = node_to_item(node, struct module_blacklist_node, list);
-        if (black) {
-            free(black->name);
-            list_remove(node);
-            free(black);
-        }
+        free(black->name);
+        list_remove(node);
+        free(black);
     }
 }
 
