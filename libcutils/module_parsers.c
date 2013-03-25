@@ -182,12 +182,10 @@ void free_alias_list(struct listnode *head)
     list_for_each_safe(node, next, head)
     {
         alias = node_to_item(node, struct module_alias_node, list);
-        if (alias) {
-            free(alias->pattern);
-            free(alias->name);
-            list_remove(node);
-            free(alias);
-        }
+        free(alias->pattern);
+        free(alias->name);
+        list_remove(node);
+        free(alias);
     }
 }
 
@@ -201,11 +199,9 @@ void free_black_list(struct listnode *head)
     list_for_each_safe(node, next, head)
     {
         black = node_to_item(node, struct module_blacklist_node, list);
-        if (black) {
-            free(black->name);
-            list_remove(node);
-            free(black);
-        }
+        free(black->name);
+        list_remove(node);
+        free(black);
     }
 }
 
@@ -371,17 +367,20 @@ int module_parser(const char *file_name, int mode, struct listnode *head)
     } else if (mode == READ_MODULES_BLKLST) {
         state.parse_line = parse_line_module_blacklist;
         args_to_read = 2;
-    }
+    } else
+        state.parse_line = NULL;
     for (;;) {
         int token = next_token(&state);
         switch (token) {
         case T_EOF:
-            state.parse_line(&state, 0, 0, head);
+            if (state.parse_line)
+                state.parse_line(&state, 0, 0, head);
             ret = 0;
             goto out;
         case T_NEWLINE:
             if (nargs) {
-                state.parse_line(&state, nargs, args, head);
+                if (state.parse_line)
+                    state.parse_line(&state, nargs, args, head);
                 nargs = 0;
             }
             break;
