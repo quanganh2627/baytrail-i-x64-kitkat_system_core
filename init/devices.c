@@ -733,7 +733,7 @@ static void handle_deferred_module_loading()
     list_for_each_safe(node, next, &deferred_module_loading_list) {
         alias = node_to_item(node, struct module_alias_node, list);
 
-        if (alias && alias->pattern) {
+        if (alias->pattern) {
             INFO("deferred loading of module for %s\n", alias->pattern);
             ret = insmod_by_dep(alias->pattern, get_mod_args(alias->pattern), NULL, 1, NULL,
                     MODULES_BLKLST);
