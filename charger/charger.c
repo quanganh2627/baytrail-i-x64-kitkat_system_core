@@ -761,8 +761,11 @@ static void update_screen_state(struct charger *charger, int64_t now)
         redraw_screen(charger);
         reset_animation(batt_anim);
 
-        if (charger->num_supplies_online != 0)
+        if (charger->num_supplies_online != 0) {
             autosuspend_enable();
+            clear_screen();
+            gr_flip();
+        }
 
         return;
     }
