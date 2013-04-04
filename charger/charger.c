@@ -920,6 +920,7 @@ static void process_key(struct charger *charger, int code, int64_t now)
                 set_next_key_check(charger, key, POWER_ON_KEY_TIME);
             }
             autosuspend_disable();
+            kick_animation(charger->batt_anim);
         } else {
             /* if the power key got released, force screen state cycle */
             if (key->pending)
@@ -943,6 +944,7 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     if (charger->num_supplies_online == 0 || !is_battery_valid(charger)) {
         if (charger->next_pwr_check == -1) {
             autosuspend_disable();
+            kick_animation(charger->batt_anim);
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
             LOGI("[%lld] device unplugged or invalid battery: shutting down in %lld (@ %lld)\n",
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
@@ -1013,6 +1015,7 @@ static void handle_temperature_state(struct charger *charger)
 
     if (temp >= CRIT_TEMP_THRESH) {
         autosuspend_disable();
+        kick_animation(charger->batt_anim);
         LOGI("Temperature(%d) is higher than threshold(%d), "
              "shutting down system.\n", temp, CRIT_TEMP_THRESH);
         system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
