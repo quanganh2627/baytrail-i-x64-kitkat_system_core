@@ -84,6 +84,7 @@
 /dev/mdmTrace             0660   root       radio
 /dev/mdm_ctrl             0660   root       radio
 /dev/ttyIFX0              0660   root       radio
+/dev/ttyIFX1              0660   root       radio
 
 # CDMA radio interface MUX
 /dev/ts0710mux*           0640   radio      radio
