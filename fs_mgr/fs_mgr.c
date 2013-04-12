@@ -403,6 +403,7 @@ static void check_fs(char *blk_dev, char *type, char *target)
 
             /* Only gets here on error */
             ERROR("Cannot run fs_mgr binary %s\n", E2FSCK_BIN);
+            exit(-1);
         } else {
             /* No need to check for error in fork, we can't really handle it now */
             ERROR("Fork failed trying to run %s\n", E2FSCK_BIN);
