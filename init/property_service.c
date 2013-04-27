@@ -364,15 +364,19 @@ int property_set(const char *name, const char *value)
     int namelen = strlen(name);
     int valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX) return -1;
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    if(namelen < 1) return -1;
+    if(namelen >= PROP_NAME_MAX || valuelen >= PROP_VALUE_MAX || namelen < 1) {
+        ERROR("sys_prop: invalid property %s[%d] %s[%d]\n", name, namelen, value, valuelen);
+        return -1;
+    }
 
     pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
-        if(!strncmp(name, "ro.", 3)) return -1;
+        if(!strncmp(name, "ro.", 3)) {
+            ERROR("sys_prop: unable to set read only property %s\n", name);
+            return -1;
+        }
 
         pa = __system_property_area__;
         update_prop_info(pi, value, valuelen);
@@ -380,7 +384,18 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     } else {
         pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) return -1;
+        if(pa->count == PA_COUNT_MAX) {
+            int i;
+            ERROR("sys_prop: unable to set property %s: maximum number of property reached\n", name);
+
+            ERROR("sys_prop: properties dump:\n");
+            for (i = 0; i < PA_COUNT_MAX; i++) {
+                pi = TOC_TO_INFO(pa, pa->toc[i]);
+
+                ERROR("sys_prop:\t[%s]: [%s]\n", pi->name, pi->value);
+            }
+            return -1;
+        }
 
         pi = pa_info_array + pa->count;
         pi->serial = (valuelen << 24);
@@ -441,13 +456,13 @@ void handle_property_set_fd()
     /* Check socket options here */
     if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &cr_size) < 0) {
         close(s);
-        ERROR("Unable to recieve socket options\n");
+        ERROR("Unable to receive socket options\n");
         return;
     }
 
     r = TEMP_FAILURE_RETRY(recv(s, &msg, sizeof(msg), 0));
     if(r != sizeof(prop_msg)) {
-        ERROR("sys_prop: mis-match msg size recieved: %d expected: %d errno: %d\n",
+        ERROR("sys_prop: mis-match msg size received: %d expected: %d errno: %d\n",
               r, sizeof(prop_msg), errno);
         close(s);
         return;
