@@ -306,47 +306,47 @@ void usb_host_run(struct usb_host_context *context,
     while (!done) {
         ret = read(context->fd, event_buf, sizeof(event_buf));
         if (ret >= (int)sizeof(struct inotify_event)) {
-            event = (struct inotify_event *)event_buf;
-            wd = event->wd;
-            if (wd == wdd) {
-                if ((event->mask & IN_CREATE) && !strcmp(event->name, "bus")) {
-                    watch_existing_subdirs(context, wds, wd_count);
-                    done = find_existing_devices(added_cb, client_data);
-                } else if ((event->mask & IN_DELETE) && !strcmp(event->name, "bus")) {
-                    for (i = 0; i < wd_count; i++) {
-                        if (wds[i] >= 0) {
+            j = 0;
+            /*Parse events*/
+            while (j < ret) {
+                event = (struct inotify_event *)&event_buf[j];
+                event_size = offsetof (struct inotify_event, name) + event->len;
+                j += event_size;
+                wd = event->wd;
+
+                if (wd == wdd) {
+                    if ((event->mask & IN_CREATE) && !strcmp(event->name, "bus")) {
+                        watch_existing_subdirs(context, wds, wd_count);
+                        done = find_existing_devices(added_cb, client_data);
+                    } else if ((event->mask & IN_DELETE) && !strcmp(event->name, "bus")) {
+                        for (i = 0; i < wd_count; i++) {
+                            if (wds[i] >= 0) {
+                                inotify_rm_watch(context->fd, wds[i]);
+                                wds[i] = -1;
+                            }
+                        }
+                    }
+                } else if (wd == wds[0]) {
+                    i = atoi(event->name);
+                    snprintf(path, sizeof(path), "%s/%s", USB_FS_DIR, event->name);
+                    D("%s subdirectory %s: index: %d\n", (event->mask & IN_CREATE) ?
+                                                         "new" : "gone", path, i);
+                    if (i > 0 && i < wd_count) {
+                        if (event->mask & IN_CREATE) {
+                            ret = inotify_add_watch(context->fd, path,
+                                                    IN_CREATE | IN_DELETE);
+                            if (ret >= 0)
+                                wds[i] = ret;
+                            done = find_existing_devices_bus(path, added_cb,
+                                                             client_data);
+                        } else if (event->mask & IN_DELETE) {
                             inotify_rm_watch(context->fd, wds[i]);
                             wds[i] = -1;
                         }
                     }
-                }
-            } else if (wd == wds[0]) {
-                i = atoi(event->name);
-                snprintf(path, sizeof(path), "%s/%s", USB_FS_DIR, event->name);
-                D("%s subdirectory %s: index: %d\n", (event->mask & IN_CREATE) ?
-                                                     "new" : "gone", path, i);
-                if (i > 0 && i < wd_count) {
-                    if (event->mask & IN_CREATE) {
-                        ret = inotify_add_watch(context->fd, path,
-                                                IN_CREATE | IN_DELETE);
-                        if (ret >= 0)
-                            wds[i] = ret;
-                        done = find_existing_devices_bus(path, added_cb,
-                                                         client_data);
-                    } else if (event->mask & IN_DELETE) {
-                        inotify_rm_watch(context->fd, wds[i]);
-                        wds[i] = -1;
-                    }
-                }
-            } else {
-                for (i = 1; i < wd_count && !done; i++) {
-                    if (wd == wds[i]) {
-                        j = 0;
-                        while ( j < ret ) {
-                            /*Parse events*/
-                            event = (struct inotify_event *)&event_buf[j];
-                            event_size = offsetof (struct inotify_event, name) + event->len;
-                            j += event_size;
+                } else {
+                    for (i = 1; i < wd_count && !done; i++) {
+                        if (wd == wds[i]) {
                             snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
                             if (event->mask == IN_CREATE) {
                                 D("new device %s\n", path);
