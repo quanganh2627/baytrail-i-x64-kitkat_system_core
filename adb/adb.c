@@ -498,6 +498,120 @@ void parse_banner(char *banner, atransport *t)
     t->connection_state = CS_HOST;
 }
 
+
+#if ADB_HOST
+
+reconnector reconnector_list = {
+    .next = &reconnector_list,
+    .prev = &reconnector_list,
+    .serial = "LIST HEAD",
+};
+
+ADB_MUTEX_DEFINE( reconnect_lock );
+
+void dump_reconnector()
+{
+    reconnector *cur_recon;
+    D("-------------------------------\n");
+    adb_mutex_lock(&reconnect_lock);
+    cur_recon = reconnector_list.next;
+    while(cur_recon != &reconnector_list) {
+        D("reconnector looping %s\n", cur_recon->serial);
+        D("prev %s, next %s, bail %d\n", cur_recon->prev->serial,
+            cur_recon->next->serial, cur_recon->reconnect_bail);
+        cur_recon = cur_recon->next;
+    }
+    adb_mutex_unlock(&reconnect_lock);
+    D("-------------------------------\n");
+}
+
+reconnector *alloc_reconnector()
+{
+    reconnector *recon;
+    recon = calloc(1, sizeof(reconnector));
+    if(recon) {
+        adb_mutex_lock(&reconnect_lock);
+        recon->prev = reconnector_list.prev;
+        recon->next = reconnector_list.prev->next;
+        reconnector_list.prev->next = recon;
+        reconnector_list.prev = recon;
+        adb_mutex_unlock(&reconnect_lock);
+    }
+    return recon;
+}
+
+reconnector *find_reconnector(char *serial)
+{
+    reconnector *cur_recon;
+    adb_mutex_lock(&reconnect_lock);
+    cur_recon = reconnector_list.next;
+    D("looking for %s\n", serial);
+    while(cur_recon != &reconnector_list) {
+        D("reconnector looping %s\n", cur_recon->serial);
+        if(!strncmp(serial, cur_recon->serial, strlen(serial))) {
+            D("found it!\n");
+            adb_mutex_unlock(&reconnect_lock);
+            return cur_recon;
+        }
+        cur_recon = cur_recon->next;
+    }
+    adb_mutex_unlock(&reconnect_lock);
+    return 0;
+}
+
+void remove_reconnector(reconnector *recon)
+{
+    reconnector *cur_recon;
+    reconnector *next_recon;
+    adb_mutex_lock(&reconnect_lock);
+    cur_recon = reconnector_list.next;
+    while(cur_recon != &reconnector_list) {
+        D("reconnector looping %s\n", cur_recon->serial);
+        if(cur_recon == recon) {
+            D("found it\n");
+            next_recon = cur_recon->next;
+            cur_recon->prev->next = cur_recon->next;
+            cur_recon->next->prev = cur_recon->prev;
+            free(cur_recon);
+            cur_recon = next_recon;
+            break;
+        }
+        cur_recon = cur_recon->next;
+    } while(cur_recon != &reconnector_list);
+    adb_mutex_unlock(&reconnect_lock);
+}
+
+void remove_all_reconnectors(void)
+{
+    reconnector *cur_recon;
+
+    adb_mutex_lock(&reconnect_lock);
+    cur_recon = reconnector_list.next;
+    while(cur_recon != &reconnector_list) {
+        cur_recon->reconnect_bail = 1;
+        cur_recon = cur_recon->next;
+    }
+    adb_mutex_unlock(&reconnect_lock);
+}
+
+void list_reconnects(char *outbuf, int outlen)
+{
+    int len;
+    int remaining = outlen;
+    reconnector *cur_recon;
+
+    adb_mutex_lock(&reconnect_lock);
+    cur_recon = reconnector_list.next;
+    while((cur_recon != &reconnector_list) && (remaining > 0)) {
+        len = snprintf(outbuf, remaining, "%-22s  reconnecting\n", cur_recon->serial);
+        remaining -= len;
+        outbuf += len;
+        cur_recon = cur_recon->next;
+    }
+    adb_mutex_unlock(&reconnect_lock);
+}
+#endif
+
 void handle_packet(apacket *p, atransport *t)
 {
     asocket *s;
@@ -517,6 +631,19 @@ void handle_packet(apacket *p, atransport *t)
             t->connection_state = CS_OFFLINE;
             handle_offline(t);
             send_packet(p, t);
+#if ADB_HOST
+            /* The devpath is null for TCP connections */
+            if(!t->devpath) {
+                reconnector *recon;
+                recon = alloc_reconnector();
+                if(recon) {
+                    strncpy(recon->serial, t->serial, HOSTLEN-1);
+                    reconnect_device(recon);
+                } else {
+                    D("failed to allocate reconnector");
+                }
+            }
+#endif
         }
         return;
 
@@ -1441,6 +1568,7 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
             memset(buffer, 0, sizeof(buffer));
             D("Getting device list \n");
             list_transports(buffer, sizeof(buffer), use_long);
+            list_reconnects(buffer+strlen(buffer), sizeof(buffer)-strlen(buffer));
             snprintf(buf, sizeof(buf), "OKAY%04x%s",(unsigned)strlen(buffer),buffer);
             D("Wrote device list \n");
             writex(reply_fd, buf, strlen(buf));
@@ -1451,9 +1579,11 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
     // remove TCP transport
     if (!strncmp(service, "disconnect:", 11)) {
         char buffer[4096];
+        reconnector *recon;
         memset(buffer, 0, sizeof(buffer));
         char* serial = service + 11;
         if (serial[0] == 0) {
+            remove_all_reconnectors();
             // disconnect from all TCP devices
             unregister_all_tcp_transports();
         } else {
@@ -1463,6 +1593,8 @@ int handle_host_request(char *service, transport_type ttype, char* serial, int r
                 snprintf(hostbuf, sizeof(hostbuf) - 1, "%s:5555", serial);
                 serial = hostbuf;
             }
+            recon = find_reconnector(hostbuf);
+            if(recon) recon->reconnect_bail = 1;
             atransport *t = find_transport(serial);
 
             if (t) {
