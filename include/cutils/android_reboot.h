@@ -28,6 +28,19 @@ __BEGIN_DECLS
 #define ANDROID_RB_FLAG_NO_SYNC       0x1
 #define ANDROID_RB_FLAG_NO_REMOUNT_RO 0x2
 
+/* Signal set and its operation*/
+struct signal_set
+{
+    int sig;
+    int cmd;
+    char arg[64];
+};
+void read_sig(int sig, int *cmd, char *arg);
+void kill_user_space_tasks(void);
+int really_reboot(int cmd, char *arg);
+void install_signal_handler(void(*f)(int));
+void reset_signal_handler(void);
+
 int android_reboot(int cmd, int flags, char *arg);
 
 __END_DECLS
