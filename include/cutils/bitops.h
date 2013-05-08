@@ -36,12 +36,12 @@ __BEGIN_DECLS
  * unsigned int resource_bits[BITS_TO_WORDS(num_resources)];
  * bitmask_init(resource_bits, num_resources);
  * ...
- * int bit = bitmask_ffz(resource_bits, num_resources);
- * bitmask_set(resource_bits, bit);
+ * int _bit = bitmask_ffz(resource_bits, num_resources);
+ * bitmask_set(resource_bits, _bit);
  * ...
- * if (bitmask_test(resource_bits, bit)) { ... }
+ * if (bitmask_test(resource_bits, _bit)) { ... }
  * ...
- * bitmask_clear(resource_bits, bit);
+ * bitmask_clear(resource_bits, _bit);
  *
  */
 
@@ -58,15 +58,15 @@ static inline void bitmask_init(unsigned int *bitmask, int num_bits)
 
 static inline int bitmask_ffz(unsigned int *bitmask, int num_bits)
 {
-    int bit, result;
+    int _bit, result;
     unsigned int i;
 
     for (i = 0; i < BITS_TO_WORDS(num_bits); i++) {
-        bit = ffs(~bitmask[i]);
-        if (bit) {
+        _bit = ffs(~bitmask[i]);
+        if (_bit) {
             // ffs is 1-indexed, return 0-indexed result
-            bit--;
-            result = BITS_PER_WORD * i + bit;
+            _bit--;
+            result = BITS_PER_WORD * i + _bit;
             if (result >= num_bits)
                 return -1;
             return result;
@@ -75,19 +75,19 @@ static inline int bitmask_ffz(unsigned int *bitmask, int num_bits)
     return -1;
 }
 
-static inline void bitmask_set(unsigned int *bitmask, int bit)
+static inline void bitmask_set(unsigned int *bitmask, int _bit)
 {
-    bitmask[BIT_WORD(bit)] |= BIT_MASK(bit);
+    bitmask[BIT_WORD(_bit)] |= BIT_MASK(_bit);
 }
 
-static inline void bitmask_clear(unsigned int *bitmask, int bit)
+static inline void bitmask_clear(unsigned int *bitmask, int _bit)
 {
-    bitmask[BIT_WORD(bit)] &= ~BIT_MASK(bit);
+    bitmask[BIT_WORD(_bit)] &= ~BIT_MASK(_bit);
 }
 
-static inline bool bitmask_test(unsigned int *bitmask, int bit)
+static inline bool bitmask_test(unsigned int *bitmask, int _bit)
 {
-    return bitmask[BIT_WORD(bit)] & BIT_MASK(bit);
+    return bitmask[BIT_WORD(_bit)] & BIT_MASK(_bit);
 }
 
 static inline int popcount(unsigned int x)
