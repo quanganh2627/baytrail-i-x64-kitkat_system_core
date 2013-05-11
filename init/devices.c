@@ -773,9 +773,9 @@ static void handle_module_loading(const char *modalias)
     struct module_alias_node *node;
     int ret;
 
-    handle_deferred_module_loading();
-
     if (!modalias) return;
+
+    handle_deferred_module_loading();
 
     ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
 
