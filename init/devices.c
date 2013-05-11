@@ -759,9 +759,9 @@ static void handle_module_loading(const char *modalias)
     struct module_alias_node *node;
     int ret;
 
-    handle_deferred_module_loading();
-
     if (!modalias) return;
+
+    handle_deferred_module_loading();
 
     ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
 
@@ -785,7 +785,9 @@ static void handle_module_loading(const char *modalias)
 static void handle_device_event(struct uevent *uevent)
 {
     if (!strcmp(uevent->action,"add")) {
-        handle_module_loading(uevent->modalias);
+        if (uevent->modalias) {
+                handle_module_loading(uevent->modalias);
+        }
     }
 
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
@@ -1033,7 +1035,7 @@ void handle_device_fd()
 **
 ** We drain any pending events from the netlink socket every time
 ** we poke another uevent file to make sure we don't overrun the
-** socket's buffer.  
+** socket's buffer.
 */
 
 static void do_coldboot(DIR *d)
