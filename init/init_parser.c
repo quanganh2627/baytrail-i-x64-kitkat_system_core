@@ -149,6 +149,7 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
+        if (!strcmp(s, "etprop_from_sysfs")) return K_setprop_from_sysfs;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
         if (!strcmp(s, "etsebool")) return K_setsebool;
         if (!strcmp(s, "ocket")) return K_socket;

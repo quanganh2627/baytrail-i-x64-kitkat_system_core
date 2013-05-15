@@ -703,6 +703,41 @@ int do_write(int nargs, char **args)
     return write_file(path, prop_val);
 }
 
+int do_setprop_from_sysfs(int nargs, char **args)
+{
+    const char *path = args[1];
+    const char *prop_name = args[2];
+    char prop_val[PROP_VALUE_MAX];
+    int ret;
+    int fd;
+    unsigned sz;
+
+    if (strncmp(path, "/sys/", sizeof("/sys/") - 1)) {
+        ERROR("read from /sys only: '%s'\n", path);
+        return -EINVAL;
+    }
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        ERROR("cannot open '%s': '%s'\n", path, strerror(errno));
+        return fd;
+    }
+
+    sz = read(fd, prop_val, PROP_VALUE_MAX-1);
+    if (sz <= 0) {
+        ERROR("cannot read from '%s': '%s'\n", path, strerror(errno));
+        ret = sz;
+        goto oops;
+    }
+
+    prop_val[sz-1] = '\0';
+    ret = property_set(prop_name, prop_val);
+
+oops:
+    close(fd);
+    return ret;
+}
+
 int do_copy(int nargs, char **args)
 {
     char *buffer = NULL;
