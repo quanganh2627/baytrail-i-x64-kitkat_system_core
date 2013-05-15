@@ -34,6 +34,7 @@ int do_trigger(int nargs, char **args);
 int do_symlink(int nargs, char **args);
 int do_sysclktz(int nargs, char **args);
 int do_write(int nargs, char **args);
+int do_setprop_from_sysfs(int nargs, char **args);
 int do_copy(int nargs, char **args);
 int do_chown(int nargs, char **args);
 int do_chmod(int nargs, char **args);
@@ -95,6 +96,7 @@ enum {
     KEYWORD(user,        OPTION,  0, 0, 0)
     KEYWORD(wait,        COMMAND, 1, do_wait, 0)
     KEYWORD(write,       COMMAND, 2, do_write, 0)
+    KEYWORD(setprop_from_sysfs,       COMMAND, 2, do_setprop_from_sysfs, 0)
     KEYWORD(copy,        COMMAND, 2, do_copy, 0)
     KEYWORD(chown,       COMMAND, 2, do_chown, 0)
     KEYWORD(chmod,       COMMAND, 2, do_chmod, 0)
