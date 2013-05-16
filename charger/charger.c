@@ -63,6 +63,7 @@
 #define BATTERY_UNKNOWN_TIME    (2 * MSEC_PER_SEC)
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
+#define THERMAL_POLL_TIME       (5 * MSEC_PER_SEC)
 
 #define BATTERY_FULL_THRESH     95
 #define BOOT_BATT_MIN_CAP_THRS  3
@@ -1177,7 +1178,7 @@ static void wait_next_event(struct charger *charger, int64_t now)
     if (next_event != -1 && next_event != INT64_MAX)
         timeout = max(0, next_event - now);
     else
-        timeout = -1;
+        timeout = THERMAL_POLL_TIME;
     LOGV("[%lld] blocking (%lld)\n", now, timeout);
     ret = ev_wait((int)timeout);
     if (!ret)
