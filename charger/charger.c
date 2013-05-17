@@ -74,11 +74,16 @@
 #define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
 #define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
 
-#define TEMP_BASE_PATH          "/sys/class/thermal/thermal_zone"
-#define TEMP_SENS_TYPE          "/type"
-#define TEMP_SENS_VAL           "/temp"
-#define TEMP_MON_TYPE           "skin0"
-#define CRIT_TEMP_THRESH        64000
+#define TEMP_BASE_PATH               "/sys/class/thermal/thermal_zone"
+#define TEMP_SENS_TYPE               "/type"
+#define TEMP_SENS_VAL                "/temp"
+#define TEMP_MON_TYPE_FRONT_SKIN     "skin0"
+#define TEMP_MON_TYPE_BACK_SKIN      "skin1"
+/* temperature is in mC */
+#define CRIT_TEMP_THRESH_FRONT_SKIN  64000
+#define CRIT_TEMP_THRESH_BACK_SKIN   74000
+
+
 
 #define RTC_FILE                 "/dev/rtc0"
 #define IPC_DEVICE_NAME          "/dev/mid_ipc"
@@ -966,58 +971,92 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
     }
 }
 
-static int get_temp_int(void)
+static int get_temp_int(char *sensor_name)
 {
     int sensor_count = 0;
-    char path[256], buf[256];
-    static int ret = -1;
+    char path[PATH_MAX], buf[PATH_MAX];
+    int ret = -1;
+    static int index_skin0 = -1;
+    static int index_skin1 = -1;
+
+    if(!sensor_name) return ret;
 
     /* if the sysfs path is found already, just return with value */
-    if (ret != -1)
-        return ret;
+    if (!strcmp(sensor_name, "skin0") && index_skin0 != -1)
+        return index_skin0;
+    else if (!strcmp(sensor_name, "skin1") && index_skin1 != -1)
+        return index_skin1;
 
-    while (true) {
-        snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+    snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+    memset(buf, 0, sizeof(buf));
+    /* loop through all the sysfs files. Exit when file doesnt exist.
+     * Assumption is if file doesnt exist for a given sensor_count,
+     * no file exist for a higher sensor_count */
+    while (read_file(path, buf, sizeof(buf)) >= 0) {
+         if (!strcmp(buf, sensor_name)){
+             ret = sensor_count;
+             break;
+         }
 
-        memset(buf, 0, sizeof(buf));
-        ret = read_file(path, buf, sizeof(buf));
-        if (ret < 0) {
-            break;
-        } else {
-            if (!strcmp(buf, TEMP_MON_TYPE)) {
-                ret = sensor_count;
-                break;
-            }
-        }
-        sensor_count++;
+         sensor_count++;
+         snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
+         memset(buf, 0, sizeof(buf));
     }
 
+    if (ret == -1) return ret;
+
+    if (!strcmp(sensor_name, "skin0"))
+        index_skin0 = ret;
+    else
+        index_skin1 = ret;
     return ret;
 }
 
 static void handle_temperature_state(struct charger *charger)
 {
-    int temp, sensor_type;
+    int temp_front, temp_back, sensor_type_front, sensor_type_back;
     int ret;
-    char path[256];
+    char path_front[PATH_MAX],path_back[PATH_MAX];
 
-    sensor_type = get_temp_int();
-    if (sensor_type < 0)
+    sensor_type_front = get_temp_int(TEMP_MON_TYPE_FRONT_SKIN);
+    if (sensor_type_front < 0)
         return;
 
-    snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_type, TEMP_SENS_VAL);
+    sensor_type_back = get_temp_int(TEMP_MON_TYPE_BACK_SKIN);
+    if (sensor_type_back < 0)
+        return;
 
-    ret = read_file_int(path, &temp);
+    snprintf(path_front, sizeof(path_front), "%s%d%s", TEMP_BASE_PATH,
+             sensor_type_front, TEMP_SENS_VAL);
+
+
+    ret = read_file_int(path_front, &temp_front);
     if (ret < 0) {
-        LOGE("Unable to open/read file %s\n", path);
+        LOGE("Unable to open/read file %s\n", path_front);
         return;
     }
 
-    if (temp >= CRIT_TEMP_THRESH) {
+    snprintf(path_back, sizeof(path_back), "%s%d%s", TEMP_BASE_PATH,
+             sensor_type_back, TEMP_SENS_VAL);
+
+    ret = read_file_int(path_back, &temp_back);
+    if (ret < 0) {
+        LOGE("Unable to open/read file %s\n", path_back);
+        return;
+    }
+    if (temp_front >= CRIT_TEMP_THRESH_FRONT_SKIN ||
+        temp_back >= CRIT_TEMP_THRESH_BACK_SKIN ) {
         autosuspend_disable();
         kick_animation(charger->batt_anim);
-        LOGI("Temperature(%d) is higher than threshold(%d), "
-             "shutting down system.\n", temp, CRIT_TEMP_THRESH);
+
+        LOGI("Temperature(%d) of %s skin is higher than threshold(%d)," "shutting down system.\n",
+             (temp_front >= CRIT_TEMP_THRESH_FRONT_SKIN) ?
+              temp_front : temp_back,
+             (temp_front >= CRIT_TEMP_THRESH_FRONT_SKIN) ?
+              "front" : "back",
+             (temp_front >= CRIT_TEMP_THRESH_FRONT_SKIN) ?
+              CRIT_TEMP_THRESH_FRONT_SKIN : CRIT_TEMP_THRESH_BACK_SKIN);
+
         system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
         android_reboot(ANDROID_RB_POWEROFF, 0, 0);
     }
