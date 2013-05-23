@@ -957,6 +957,11 @@ static int handle_crda_event(struct uevent *uevent)
     INFO("executing CRDA country=%s\n", uevent->country);
     snprintf(country_env, sizeof(country_env), "COUNTRY=%s", uevent->country);
 
+    if (access(argv[0], X_OK)) {
+        INFO("crda_event not handled - no crda executable\n");
+        return -1;
+    }
+
     switch(pid = fork()) {
     case -1:
          /* Error occured */
