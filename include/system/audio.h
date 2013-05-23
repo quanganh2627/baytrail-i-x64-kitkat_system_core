@@ -396,25 +396,6 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x20 // used for remote background playback
 } audio_output_flags_t;
 
-/* Additional information about compressed streams offloaded to
- * hardware playback
- * You should memset() the entire structure to zero before use to
- * ensure forward compatibility.
- * The _reserved field is for future extension and MUST be 0x00000000
- */
-typedef struct audio_offload_info {
-    audio_format_t format;
-    audio_stream_type_t stream_type;
-    audio_channel_mask_t channel_mask;
-    uint32_t sample_rate;
-    uint32_t bit_rate;
-    int64_t duration_us;
-    uint32_t sessionId;
-    bool has_video;
-    bool is_streaming;
-    uint32_t _reserved; /* Must be 0x00000000 */
-} audio_offload_info_t;
-
 static inline bool audio_is_output_device(audio_devices_t device)
 {
     if (((device & AUDIO_DEVICE_BIT_IN) == 0) &&
