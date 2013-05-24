@@ -417,6 +417,7 @@ asocket *create_local_service_socket(const char *name)
     int fd;
 #if !ADB_HOST
     char value[PROPERTY_VALUE_MAX];
+    char debug[PROPERTY_VALUE_MAX];
 #endif
 
 #if !ADB_HOST
@@ -435,7 +436,9 @@ asocket *create_local_service_socket(const char *name)
 
 #if !ADB_HOST
     property_get("service.adb.tcp.port", value, "0");
-    if ((!strncmp(name, "root:", 5) && getuid() != 0)
+    property_get("ro.debuggable", debug, "");
+    if ((!strncmp(name, "root:", 5) && getuid() != 0 &&
+         strcmp(debug, "1") == 0)
         || (!strncmp(name, "usb:", 4) && strcmp(value, "0"))
         || !strncmp(name, "tcpip:", 6)) {
         D("LS(%d): enabling exit_on_close\n", s->id);
