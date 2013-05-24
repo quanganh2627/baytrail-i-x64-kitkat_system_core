@@ -967,8 +967,8 @@ static int handle_crda_event(struct uevent *uevent)
     case  0:
          /* Child related processing */
          if (execve(argv[0], argv, envp) ==  -1) {
-              ERROR("handle_crda_event - execve error: %s %s\n", argv[0], envp[0]);
-              exit(EXIT_FAILURE);
+              ERROR("handle_crda_event - execve error\n");
+              return (-1);
          }
          break;
     default:
