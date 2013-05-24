@@ -73,6 +73,6 @@ static void parse_line_device(struct parse_state* state, int nargs, char **args)
 {
     if (args && args[0] && !strncmp("mod:", args[0], 4))
         set_module_args(nargs, args);
-    else
+    else if (args)
         set_device_permission(nargs, args);
 }
