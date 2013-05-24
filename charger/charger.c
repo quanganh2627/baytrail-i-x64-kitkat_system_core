@@ -766,8 +766,11 @@ static void update_screen_state(struct charger *charger, int64_t now)
         redraw_screen(charger);
         reset_animation(batt_anim);
 
-        if (charger->num_supplies_online > 0)
+        if (charger->num_supplies_online > 0) {
             request_suspend(true);
+            clear_screen();
+            gr_flip();
+        }
         return;
     }
 
@@ -920,12 +923,12 @@ static void process_key(struct charger *charger, int code, int64_t now)
                  */
                 set_next_key_check(charger, key, POWER_ON_KEY_TIME);
             }
+            kick_animation(charger->batt_anim);
+            request_suspend(false);
         } else {
             /* if the power key got released, force screen state cycle */
-            if (key->pending) {
-                request_suspend(false);
+            if (key->pending)
                 kick_animation(charger->batt_anim);
-            }
         }
     }
 
@@ -943,6 +946,7 @@ static void handle_input_state(struct charger *charger, int64_t now)
 static void handle_power_supply_state(struct charger *charger, int64_t now)
 {
     if (charger->num_supplies_online == 0 || !is_battery_valid(charger)) {
+        kick_animation(charger->batt_anim);
         request_suspend(false);
         if (charger->next_pwr_check == -1) {
             charger->next_pwr_check = now + UNPLUGGED_SHUTDOWN_TIME;
@@ -950,8 +954,8 @@ static void handle_power_supply_state(struct charger *charger, int64_t now)
                  now, UNPLUGGED_SHUTDOWN_TIME, charger->next_pwr_check);
         } else if (now >= charger->next_pwr_check) {
             LOGI("[%lld] shutting down\n", now);
-             if (!is_battery_valid(charger))
-                 system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
+            if (!is_battery_valid(charger))
+                system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
             android_reboot(ANDROID_RB_POWEROFF, 0, 0);
         } else {
             /* otherwise we already have a shutdown timer scheduled */
