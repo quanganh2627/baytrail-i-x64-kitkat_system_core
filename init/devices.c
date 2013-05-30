@@ -251,20 +251,21 @@ const char *get_mod_args(const char *mod_name)
     struct listnode *node = NULL;
     struct mod_arg_node *mod_arg_node = NULL;
     struct mod_args_ *mod_args = NULL;
-    char * real_mod_name = NULL;
+    list_declare(module_aliases);
 
     if (list_empty(&lmodalias)) {
         parse_alias_to_list("/lib/modules/modules.alias", &lmodalias);
     }
 
-    if (!get_module_name_from_alias(mod_name, &real_mod_name, &lmodalias))
-        mod_name = real_mod_name;
+    if (get_module_name_from_alias(mod_name, &module_aliases, &lmodalias) > 0) {
+        struct module_alias_node *alias;
+        alias = node_to_item(list_head(&module_aliases), struct module_alias_node, list);
+        mod_name = alias->name;
+    }
 
     list_for_each(node, &lmod_args) {
         mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
         mod_args = &mod_arg_node->mod_args;
-
-
         if (!strcmp(mod_name, mod_args->name)) {
             return mod_args->args;
         }
