@@ -32,12 +32,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+typedef int socklen_t;
+#define hstrerror(a) strerror(errno)
+#else
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include "tcp.h"
-
 extern int h_errno;
+#endif
+
+#include "tcp.h"
 
 int tcp_write(void *userdata, const void *_data, int len)
 {
@@ -46,7 +53,7 @@ int tcp_write(void *userdata, const void *_data, int len)
     const char *_data_tmp = _data;
     tcp_handle *h = userdata;
     while (len_tmp > 0) {
-        n = write(h->sockfd, _data_tmp, len_tmp);
+        n = send(h->sockfd, _data_tmp, len_tmp, 0);
         if (n <= 0) {
             switch(errno) {
             case EAGAIN: case EINTR: continue;
@@ -66,10 +73,11 @@ int tcp_read(void *userdata, void *_data, int len)
 {
     int n, count;
     tcp_handle *h = userdata;
+    count = 0;
     while (len > 0) {
         // This xfer chunking is to mirror usb_read() implementation:
         int xfer = (len > 16*1024) ? 16*1024 : len;
-        n = read(h->sockfd, _data, xfer);
+        n = recv(h->sockfd, _data, xfer, 0);
         if (n == 0) {
             fprintf(stderr, "ERROR: Failed to read network: "
                     "Unexpected end of file.");
@@ -100,12 +108,36 @@ int tcp_close(void *userdata)
     return close(h->sockfd);
 }
 
+#ifdef _WIN32
+void exit_os(void) {
+    WSACleanup();
+}
+
+void init_os(void) {
+    WSADATA wsaData;
+    int iResult;
+
+    // Initialize Winsock
+    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed: %d\n", iResult);
+        exit(1);
+    }
+    atexit(exit_os);
+}
+#endif
+
+
 tcp_handle *tcp_open(const char *host)
 {
     int sockfd;
     struct sockaddr_in serv_addr;
     struct hostent *server;
     tcp_handle *tcp = 0;
+
+#ifdef _WIN32
+    init_os();
+#endif
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
