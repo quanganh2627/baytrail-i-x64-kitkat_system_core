@@ -67,19 +67,6 @@ extern struct selabel_handle *sehandle;
 
 static int device_fd = -1;
 
-struct uevent {
-    const char *action;
-    const char *path;
-    const char *subsystem;
-    const char *firmware;
-    const char *partition_name;
-    const char *device_name;
-    const char *country;
-    const char *modalias;
-    int partition_num;
-    int major;
-    int minor;
-};
 
 struct mod_args_ {
     char *name;
@@ -995,7 +982,7 @@ static int handle_crda_event(struct uevent *uevent)
     return 0;
 }
 
-static void handle_firmware_event(struct uevent *uevent)
+void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
     int ret;
@@ -1006,16 +993,17 @@ static void handle_firmware_event(struct uevent *uevent)
     if(strcmp(uevent->action, "add"))
         return;
 
-    /* we fork, to avoid making large memory allocations in init proper */
-    pid = fork();
-    if (!pid) {
-        process_firmware_event(uevent);
-        exit(EXIT_SUCCESS);
-    }
+    process_firmware_event(uevent);
+}
+
+void handle_device_crda_event(struct uevent *uevent)
+{
+    handle_device_event(uevent);
+    handle_crda_event(uevent);
 }
 
 #define UEVENT_MSG_LEN  1024
-void handle_device_fd()
+void handle_events_fd(void (*handle_event_fp)(struct uevent*))
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
@@ -1029,9 +1017,7 @@ void handle_device_fd()
         struct uevent uevent;
         parse_event(msg, &uevent);
 
-        handle_device_event(&uevent);
-        handle_firmware_event(&uevent);
-        handle_crda_event(&uevent);
+        handle_event_fp(&uevent);
     }
 }
 
@@ -1055,7 +1041,7 @@ static void do_coldboot(DIR *d)
     if(fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
-        handle_device_fd();
+        handle_events_fd(handle_device_event);
     }
 
     while((de = readdir(d))) {
@@ -1118,6 +1104,17 @@ void device_init(void)
     } else {
         log_event_print("skipping coldboot, already done\n");
     }
+}
+
+void uevent_fd_init(void)
+{
+   /* is 1MB enough? udev uses 16MB! */
+    device_fd = uevent_open_socket(1024*1024, true);
+    if(device_fd < 0)
+        return;
+
+    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
+    fcntl(device_fd, F_SETFL, O_NONBLOCK);
 }
 
 int get_device_fd()
