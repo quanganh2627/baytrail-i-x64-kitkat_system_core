@@ -41,10 +41,15 @@ typedef int socklen_t;
 #include <sys/socket.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 extern int h_errno;
 #endif
 
 #include "tcp.h"
+#include "fastboot.h"
+
+#define FSTBOOT_PORT 1234
+#define FSTBOOT_DFL_ADDR "192.168.42.1"
 
 int tcp_write(void *userdata, const void *_data, int len)
 {
@@ -127,36 +132,84 @@ void init_os(void) {
 }
 #endif
 
+static int tcp_open_sock(char *host, struct sockaddr_in *serv_addr)
+{
+    int sockfd;
+    struct hostent *server;
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        fprintf(stderr, "ERROR: Can't open socket: %s\n", strerror(errno));
+        return sockfd;
+    }
+
+    server = gethostbyname(host);
+    if (server == NULL) {
+        fprintf(stderr, "ERROR: Can't find '%s': %s\n", host, hstrerror(h_errno));
+        return -1;
+    }
+
+    memset(serv_addr, sizeof(*serv_addr), 0);
+    serv_addr->sin_family = AF_INET;
+    memcpy(&serv_addr->sin_addr.s_addr,
+           server->h_addr,
+           server->h_length);
+    serv_addr->sin_port = htons(FSTBOOT_PORT);
+    return sockfd;
+}
+
+/*
+ * try to open a connection to 192.168.42.1:1234
+ * in less than 100ms
+ */
+void tcp_list(void)
+{
+#ifndef _WIN32
+    int sockfd;
+    struct sockaddr_in serv_addr;
+    int ret;
+    fd_set wfds;
+    struct timeval tv;
+
+    sockfd = tcp_open_sock(FSTBOOT_DFL_ADDR, &serv_addr);
+    if (sockfd < 0)
+        return;
+
+    if (fcntl(sockfd, F_SETFL, O_NONBLOCK) < 0)
+        return;
+
+    if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+        if (errno != EINPROGRESS)
+            return;
+
+        FD_ZERO(&wfds);
+        FD_SET(sockfd, &wfds);
+
+        /* Wait 100ms to connect. */
+        tv.tv_sec = 0;
+        tv.tv_usec = 100000;
+
+        ret = select(sockfd + 1, NULL, &wfds, NULL, &tv);
+        if (ret < 0)
+            return;
+        if (!FD_ISSET(sockfd, &wfds))
+            return;
+    }
+    list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
+#endif
+}
 
 tcp_handle *tcp_open(const char *host)
 {
     int sockfd;
     struct sockaddr_in serv_addr;
-    struct hostent *server;
     tcp_handle *tcp = 0;
 
 #ifdef _WIN32
     init_os();
 #endif
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        fprintf(stderr, "ERROR: Can't open socket: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    server = gethostbyname(host);
-    if (server == NULL) {
-        fprintf(stderr, "ERROR: Can't find '%s': %s\n", host, hstrerror(h_errno));
-        exit(1);
-    }
-
-    memset(&serv_addr, sizeof(serv_addr), 0);
-    serv_addr.sin_family = AF_INET;
-    memcpy(&serv_addr.sin_addr.s_addr,
-           server->h_addr,
-           server->h_length);
-    serv_addr.sin_port = htons(1234);
+    sockfd = tcp_open_sock(FSTBOOT_DFL_ADDR, &serv_addr);
     if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
         fprintf(stderr, "ERROR: Unable to connect to %s: %s\n",
                 host, strerror(errno));
