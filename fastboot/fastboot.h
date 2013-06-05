@@ -69,4 +69,6 @@ void die(const char *fmt, ...);
 /* Current product */
 extern char cur_product[FB_RESPONSE_SZ + 1];
 
+void list_devices_callback(char *serial, char *path);
+
 #endif

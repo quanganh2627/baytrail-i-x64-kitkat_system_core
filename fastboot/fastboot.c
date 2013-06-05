@@ -224,7 +224,19 @@ int match_fastboot(usb_ifc_info *info)
     return match_fastboot_with_serial(info, serial);
 }
 
-int list_devices_callback(usb_ifc_info *info)
+void list_devices_callback(char *serial, char *path)
+{
+    // output compatible with "adb devices"
+    if (!long_listing) {
+        printf("%s\tfastboot\n", serial);
+    } else if (path) {
+        printf("%-22s fastboot\n", serial);
+    } else {
+        printf("%-22s fastboot %s\n", serial, path);
+    }
+}
+
+int list_devices_callback_usb(usb_ifc_info *info)
 {
     if (match_fastboot_with_serial(info, NULL) == 0) {
         char* serial = info->serial_number;
@@ -234,14 +246,7 @@ int list_devices_callback(usb_ifc_info *info)
         if (!serial[0]) {
             serial = "????????????";
         }
-        // output compatible with "adb devices"
-        if (!long_listing) {
-            printf("%s\tfastboot\n", serial);
-        } else if (!info->device_path) {
-            printf("%-22s fastboot\n", serial);
-        } else {
-            printf("%-22s fastboot %s\n", serial, info->device_path);
-        }
+        list_devices_callback(serial, info->device_path);
     }
 
     return -1;
@@ -277,7 +282,8 @@ void list_devices(void) {
     // We don't actually open a USB device here,
     // just getting our callback called so we can
     // list all the connected devices.
-    usb_open(list_devices_callback);
+    usb_open(list_devices_callback_usb);
+    tcp_list();
 }
 
 void usage(void)
