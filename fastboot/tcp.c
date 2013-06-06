@@ -220,7 +220,9 @@ tcp_handle *tcp_open(const char *host)
     }
 
     tcp = calloc(1, sizeof(tcp_handle));
-    tcp->sockfd = sockfd;
+    if (tcp != NULL) {
+        tcp->sockfd = sockfd;
+    }
     return tcp;
 }
 
