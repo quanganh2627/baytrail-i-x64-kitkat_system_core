@@ -194,8 +194,11 @@ void tcp_list(void)
             return;
         if (!FD_ISSET(sockfd, &wfds))
             return;
+        if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+            return;
     }
     list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
+    close(sockfd);
 #endif
 }
 
