@@ -371,7 +371,7 @@ enum {
                                  AUDIO_DEVICE_OUT_WIRED_HEADPHONE |
                                  AUDIO_DEVICE_OUT_EARPIECE)),
     // device supporting remote background playback in addition to foreground playback
-    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = AUDIO_DEVICE_OUT_WIDI,
+    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = AUDIO_DEVICE_OUT_WIDI|AUDIO_DEVICE_OUT_REMOTE_SUBMIX,
 };
 
 typedef uint32_t audio_devices_t;
