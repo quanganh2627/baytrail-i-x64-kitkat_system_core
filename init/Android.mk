@@ -23,6 +23,11 @@ LOCAL_SRC_FILES += bootchart.c
 LOCAL_CFLAGS    += -DBOOTCHART=1
 endif
 
+ifeq ($(BIGCORE_USB_INSTALLER), true)
+    LOCAL_CFLAGS += -DBIGCORE_USB_INSTALLER
+endif
+
+
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1
 endif

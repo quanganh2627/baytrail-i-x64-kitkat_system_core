@@ -656,7 +656,10 @@ static int console_init_action(int nargs, char **args)
         }
     }
 
+#ifndef BIGCORE_USB_INSTALLER
     vt_set_mode_tg(1);
+#endif
+
 
     return 0;
 }
