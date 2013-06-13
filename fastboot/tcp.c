@@ -199,6 +199,75 @@ void tcp_list(void)
     }
     list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
     close(sockfd);
+#else
+    SOCKET s;
+    SOCKADDR_IN target;
+    WSADATA wsaData;
+    int iError;
+    u_long NonBlock=1;
+
+    // Initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        return;
+    }
+
+   //Create a socket
+    if((s = socket(AF_INET , SOCK_STREAM , 0 )) == INVALID_SOCKET) {
+        WSACleanup();
+        return;
+    }
+
+    /* Non blocking socket */
+    NonBlock = 1;
+    if (ioctlsocket(s, FIONBIO, &NonBlock) == SOCKET_ERROR) {
+        goto clear_env;
+    }
+
+    target.sin_addr.s_addr = inet_addr(FSTBOOT_DFL_ADDR);
+    target.sin_family = AF_INET;
+    target.sin_port = htons( FSTBOOT_PORT );
+    //Connect to remote server
+    if(connect(s , (struct sockaddr *)&target , sizeof(target)) == SOCKET_ERROR) {
+        iError = WSAGetLastError();
+        //check if error was WSAEWOULDBLOCK, where we'll wait
+        if(iError == WSAEWOULDBLOCK) {
+            fd_set Write, Err;
+            TIMEVAL Timeout;
+
+            FD_ZERO(&Write);
+            FD_ZERO(&Err);
+            FD_SET(s, &Write);
+            FD_SET(s, &Err);
+            Timeout.tv_sec = 0;
+            Timeout.tv_usec = 100000;
+            iError = select(0,           //ignored
+                            NULL,        //read
+                            &Write,      //Write Check
+                            &Err,        //Error Check
+                            &Timeout);
+            if(iError == 0) {
+                goto clear_env;
+            } else {
+                if(FD_ISSET(s, &Write)) {
+                    list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
+                    goto clear_env;
+                 }
+                if(FD_ISSET(s, &Err)) {
+                    goto clear_env;
+                }
+            }
+        } else {
+            goto clear_env;
+        }
+    } else {
+        //connected without waiting (will never execute)
+        list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
+        goto clear_env;
+    }
+clear_env:
+    closesocket(s);
+    WSACleanup();
+
 #endif
 }
 
