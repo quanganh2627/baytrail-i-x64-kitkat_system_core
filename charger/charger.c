@@ -983,9 +983,9 @@ static int get_temp_int(char *sensor_name)
     if(!sensor_name) return ret;
 
     /* if the sysfs path is found already, just return with value */
-    if (!strcmp(sensor_name, "skin0") && index_skin0 != -1)
+    if ((!strcmp(sensor_name, "skin0") || !strcmp(sensor_name, "SYSTHERM0")) && index_skin0 != -1)
         return index_skin0;
-    else if (!strcmp(sensor_name, "skin1") && index_skin1 != -1)
+    else if ((!strcmp(sensor_name, "skin1") || !strcmp(sensor_name, "SYSTHERM1")) && index_skin1 != -1)
         return index_skin1;
 
     snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
@@ -1006,7 +1006,7 @@ static int get_temp_int(char *sensor_name)
 
     if (ret == -1) return ret;
 
-    if (!strcmp(sensor_name, "skin0"))
+    if (!strcmp(sensor_name, "skin0") || !strcmp(sensor_name, "SYSTHERM0"))
         index_skin0 = ret;
     else
         index_skin1 = ret;
@@ -1020,12 +1020,18 @@ static void handle_temperature_state(struct charger *charger)
     char path_front[PATH_MAX],path_back[PATH_MAX];
 
     sensor_type_front = get_temp_int(TEMP_MON_TYPE_FRONT_SKIN);
-    if (sensor_type_front < 0)
-        return;
+    if (sensor_type_front < 0) {
+    	sensor_type_front = get_temp_int("SYSTHERM1");
+	if (sensor_type_front < 0)
+           return;
+    }
 
     sensor_type_back = get_temp_int(TEMP_MON_TYPE_BACK_SKIN);
-    if (sensor_type_back < 0)
-        return;
+    if (sensor_type_back < 0) {
+    	sensor_type_back = get_temp_int("SYSTHERM0");
+	if (sensor_type_back < 0)
+           return;
+    }
 
     snprintf(path_front, sizeof(path_front), "%s%d%s", TEMP_BASE_PATH,
              sensor_type_front, TEMP_SENS_VAL);
