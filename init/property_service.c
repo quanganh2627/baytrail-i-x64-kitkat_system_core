@@ -83,6 +83,7 @@ struct {
     { "gps.",             AID_GPS,      0 },
     { "wpa_supplicant.",  AID_WIFI,     0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
+    { "nfc.",             AID_NFC,      0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
     { "debug.",           AID_SYSTEM,   0 },
