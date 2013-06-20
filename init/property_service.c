@@ -84,6 +84,7 @@ struct {
     { "hostapd.",         AID_WIFI,     0 },
     { "gps.",             AID_GPS,      0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
+    { "nfc.",             AID_NFC,      0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
     { "debug.",           AID_SYSTEM,   0 },
