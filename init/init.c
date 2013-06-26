@@ -641,6 +641,34 @@ static void import_kernel_nv(char *name, int for_emulator)
     }
 }
 
+static void boardid_init (void)
+{
+    int fd = open("/proc/boardid", O_RDONLY);
+    char buf[PROP_VALUE_MAX]={'\0'};
+    char bid[PROP_VALUE_MAX]={'\0'};
+
+    if (fd >= 0) {
+        int n=read(fd, buf, PROP_VALUE_MAX-1);
+        close(fd);
+
+        if (n <= 0){
+            ERROR("fail to read /proc/boardid!\n");
+            return;
+        }
+    } else {
+        ERROR("fail to open /proc/boardid!\n");
+        return;
+    }
+
+    sscanf(buf, "boardid=%91s", bid);
+
+    if (bid[0] == '\0') {
+        ERROR("no bid value in /proc/boardid!\n");
+    }
+
+    property_set("ro.board.id", bid);
+
+}
 static void export_kernel_boot_props(void)
 {
     char tmp[PROP_VALUE_MAX];
@@ -686,6 +714,8 @@ static void export_kernel_boot_props(void)
         property_set("ro.factorytest", "2");
     else
         property_set("ro.factorytest", "0");
+
+    boardid_init();
 }
 
 static void process_kernel_cmdline(void)
