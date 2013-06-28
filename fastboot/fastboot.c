@@ -222,11 +222,11 @@ void list_devices_callback(char *serial, char *path)
 {
     // output compatible with "adb devices"
     if (!long_listing) {
-        printf("%s\tfastboot\n", serial);
-    } else if (path) {
-        printf("%-22s fastboot\n", serial);
+        printf("%-22s \tfastboot\n", serial);
+    } else if (!path) {
+        printf("%-22s \tfastboot\n", serial);
     } else {
-        printf("%-22s fastboot %s\n", serial, path);
+        printf("%-22s \tfastboot %-128s\n", serial, path);
     }
 }
 
