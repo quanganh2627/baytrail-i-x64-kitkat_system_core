@@ -173,31 +173,40 @@ void restart_usb_service(int fd, void *cookie)
 
 void reboot_service(int fd, void *arg)
 {
-    char buf[100];
-    int pid, ret;
+    char value[PROPERTY_VALUE_MAX];
 
-    sync();
+    property_get("service.adb.root", value, "");
+    if(strcmp(value, "1") == 0 || getuid() == 0) {
+        char buf[100];
+        int pid, ret;
 
-    /* Attempt to unmount the SD card first.
-     * No need to bother checking for errors.
-     */
-    pid = fork();
-    if (pid == 0) {
-        /* ask vdc to unmount it */
-        execl("/system/bin/vdc", "/system/bin/vdc", "volume", "unmount",
-                getenv("EXTERNAL_STORAGE"), "force", NULL);
-    } else if (pid > 0) {
-        /* wait until vdc succeeds or fails */
-        waitpid(pid, &ret, 0);
+        sync();
+
+        /* Attempt to unmount the SD card first.
+         * No need to bother checking for errors.
+         */
+        pid = fork();
+        if (pid == 0) {
+            /* ask vdc to unmount it */
+            execl("/system/bin/vdc", "/system/bin/vdc", "volume", "unmount",
+                    getenv("EXTERNAL_STORAGE"), "force", NULL);
+        } else if (pid > 0) {
+            /* wait until vdc succeeds or fails */
+            waitpid(pid, &ret, 0);
+        }
+
+        ret = android_reboot(ANDROID_RB_RESTART2, 0, (char *) arg);
+        if (ret < 0) {
+            snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
+            writex(fd, buf, strlen(buf));
+        }
+        free(arg);
+        adb_close(fd);
+    } else { /* "adb reboot on user debug version" */
+        property_set("service.adb.reboot", "1");
+        property_set("service.adb.reboot.arg", arg);
+        restart_root_service(fd, NULL);
     }
-
-    ret = android_reboot(ANDROID_RB_RESTART2, 0, (char *) arg);
-    if (ret < 0) {
-        snprintf(buf, sizeof(buf), "reboot failed: %s\n", strerror(errno));
-        writex(fd, buf, strlen(buf));
-    }
-    free(arg);
-    adb_close(fd);
 }
 
 #endif

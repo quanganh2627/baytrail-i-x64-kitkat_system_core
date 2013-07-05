@@ -75,7 +75,11 @@ struct svcenvinfo {
 
 #define NR_SVC_SUPP_GIDS 12    /* twelve supplementary groups */
 
+#ifdef BIGCORE_USB_INSTALLER
+#define COMMAND_RETRY_TIMEOUT 25
+#else
 #define COMMAND_RETRY_TIMEOUT 10
+#endif
 
 struct service {
         /* list of all services */
