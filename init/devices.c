@@ -55,6 +55,7 @@
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
+#define MODULES_BLKLST  "/ueventd.modules.blacklist"
 
 extern struct selabel_handle *sehandle;
 
