@@ -1089,7 +1089,7 @@ static int should_drop_privileges() {
 #if !ADB_HOST
 static int check_and_adb_reboot(void)
 {
-    int pid, ret;
+    int pid = 0, ret = 0;
     char value[PROPERTY_VALUE_MAX];
 
     property_get("service.adb.reboot", value, "");
