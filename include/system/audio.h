@@ -396,6 +396,17 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x20 // used for remote background playback
 } audio_output_flags_t;
 
+typedef enum {
+    AUDIO_OFFLOAD_NONE    = 0x00000000,    // offload none
+    VIDEO_OFFLOAD         = 0x00000001,    // offload audio in AV files
+    EFFECTS_OFFLOAD       = 0x00000002,    // offload effects
+    MC_OFFLOAD            = 0x00000004,    // offload multi channel content
+    AUDIO_OFFLOAD_MP3     = 0x00000100,    // offload MP3
+    AUDIO_OFFLOAD_AAC     = 0x00000200,    // offload AAC
+    AUDIO_OFFLOAD_EAC3    = 0x00000400,    // offload EAC3
+    AUDIO_OFFLOAD_WMA_9   = 0x00000800,    // offload WMA-9
+} audio_offload_format_t;
+
 static inline bool audio_is_output_device(audio_devices_t device)
 {
     if (((device & AUDIO_DEVICE_BIT_IN) == 0) &&
