@@ -876,6 +876,12 @@ int main(int argc, char **argv)
     int keychord_fd_init = 0;
     bool is_charger = false;
 
+#ifdef MANUALENABLE
+    /* enable bootchart if asked by user */
+    if (getenv("bootchart"))
+        enablechart = 1;
+#endif
+
     /* If we are called as 'modprobe' command, we run as a
      * standalone executable and reuse ueventd's logic to do the job.
      */
@@ -998,6 +1004,9 @@ int main(int argc, char **argv)
 
 
 #if BOOTCHART
+#ifdef MANUALENABLE
+    if (enablechart)
+#endif
     queue_builtin_action(bootchart_init_action, "bootchart_init");
 #endif
 
@@ -1039,6 +1048,9 @@ int main(int argc, char **argv)
             timeout = 0;
 
 #if BOOTCHART
+#ifdef MANUALENABLE
+        if (enablechart)
+#endif
         if (bootchart_count > 0) {
             if (timeout < 0 || timeout > BOOTCHART_POLLING_MS)
                 timeout = BOOTCHART_POLLING_MS;
