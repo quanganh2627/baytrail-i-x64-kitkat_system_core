@@ -23,6 +23,10 @@
 
 #if BOOTCHART
 
+#ifdef MANUALENABLE
+extern int   enablechart;
+#endif
+
 extern int   bootchart_init(void);
 extern int   bootchart_step(void);
 extern void  bootchart_finish(void);
