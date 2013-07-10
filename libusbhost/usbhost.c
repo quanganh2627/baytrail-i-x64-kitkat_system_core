@@ -224,7 +224,7 @@ int usb_host_read_event(struct usb_host_context *context)
     struct inotify_event* event;
     char event_buf[512];
     char path[100];
-    int i, ret, done = 0;
+    int i, ret, found, done = 0;
     int j, event_size;
     int wd;
 
@@ -242,22 +242,27 @@ int usb_host_read_event(struct usb_host_context *context)
                     context->wds[i] = ret;
             }
         } else {
-            for (i = 1; (i < MAX_USBFS_WD_COUNT) && !done; i++) {
-                if (wd == context->wds[i]) {
-                    j = 0;
-                    while ( j < ret ) {
-                        /*Parse events*/
-                        event = (struct inotify_event *)&event_buf[j];
-                        event_size = offsetof (struct inotify_event, name) + event->len;
-                        j += event_size;
-                        snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
-                        if (event->mask == IN_CREATE) {
-                            D("new device %s\n", path);
-                            done = context->cb_added(path, context->data);
-                        } else if (event->mask == IN_DELETE) {
-                            D("gone device %s\n", path);
-                            done = context->cb_removed(path, context->data);
-                        }
+            j = 0;
+            while ( j < ret ) {
+                /*Parse events*/
+                event = (struct inotify_event *)&event_buf[j];
+                event_size = offsetof (struct inotify_event, name) + event->len;
+                j += event_size;
+                found = 0;
+                for (i = 1; i < MAX_USBFS_WD_COUNT; i++) {
+                    if (event->wd == context->wds[i]) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (found) {
+                    snprintf(path, sizeof(path), "%s/%03d/%s", USB_FS_DIR, i, event->name);
+                    if (event->mask == IN_CREATE) {
+                        D("new device %s\n", path);
+                        done = context->cb_added(path, context->data);
+                    } else if (event->mask == IN_DELETE) {
+                        D("gone device %s\n", path);
+                        done = context->cb_removed(path, context->data);
                     }
                 }
             }
