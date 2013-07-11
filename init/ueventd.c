@@ -244,3 +244,16 @@ void set_module_args(int nargs, char **args)
 
     add_mod_args(nargs, mod_name, args);
 }
+
+void set_uevent_trigger(int nargs, char** args)
+{
+    char* modalias;
+
+    if (nargs <= 1)
+        return;
+
+    if (args[0][0] == '#')
+        return;
+
+    add_uevent_trigger(nargs, args);
+}
