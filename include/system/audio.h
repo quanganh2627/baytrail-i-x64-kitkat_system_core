@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
+ * Copyright (C) 2011-2013 Intel Mobile Communications GmbH
  * Copyright (C) 2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 
 #ifndef ANDROID_AUDIO_CORE_H
 #define ANDROID_AUDIO_CORE_H
@@ -49,7 +50,9 @@ typedef enum {
     AUDIO_STREAM_ENFORCED_AUDIBLE = 7, /* Sounds that cannot be muted by user and must be routed to speaker */
     AUDIO_STREAM_DTMF             = 8,
     AUDIO_STREAM_TTS              = 9,
-
+    // PEKALL FMR begin:
+    FM                            = 10,
+    // PEKALL FMR end
     AUDIO_STREAM_CNT,
     AUDIO_STREAM_MAX              = AUDIO_STREAM_CNT - 1,
 } audio_stream_type_t;
@@ -70,6 +73,9 @@ typedef enum {
                                           /* An example of remote presentation is Wifi Display */
                                           /*  where a dongle attached to a TV can be used to   */
                                           /*  play the mix captured by this audio source.      */
+    // PEKALL FMR begin:
+    AUDIO_SOURCE_FM_RX              = 9,
+    // PEKALL FMR end
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
     AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
@@ -309,6 +315,14 @@ enum {
     AUDIO_DEVICE_OUT_USB_ACCESSORY             = 0x2000,
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
+    // PEKALL FMR begin:
+    AUDIO_DEVICE_OUT_FM                        = 0x10000,
+    AUDIO_DEVICE_OUT_FM_HEADSET                =
+        (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_WIRED_HEADSET),
+    AUDIO_DEVICE_OUT_FM_HEADPHONE              =
+        (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_WIRED_HEADPHONE),
+    AUDIO_DEVICE_OUT_FM_SPEAKER                = (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_SPEAKER),
+    // PEKALL FMR end
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -326,7 +340,11 @@ enum {
                                  AUDIO_DEVICE_OUT_USB_ACCESSORY |
                                  AUDIO_DEVICE_OUT_USB_DEVICE |
                                  AUDIO_DEVICE_OUT_REMOTE_SUBMIX |
-                                 AUDIO_DEVICE_OUT_DEFAULT),
+                                 AUDIO_DEVICE_OUT_DEFAULT
+                                 // PEKALL FMR begin:
+                                 | AUDIO_DEVICE_OUT_FM
+                                 // PEKALL FMR end
+                                 ),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER),
@@ -350,6 +368,9 @@ enum {
     AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET     = AUDIO_DEVICE_BIT_IN | 0x400,
     AUDIO_DEVICE_IN_USB_ACCESSORY         = AUDIO_DEVICE_BIT_IN | 0x800,
     AUDIO_DEVICE_IN_USB_DEVICE            = AUDIO_DEVICE_BIT_IN | 0x1000,
+    // PEKALL FMR begin:
+    AUDIO_DEVICE_IN_FM_RX                 = AUDIO_DEVICE_BIT_IN | 0x2000,
+    // PEKALL FMR end
     AUDIO_DEVICE_IN_DEFAULT               = AUDIO_DEVICE_BIT_IN | AUDIO_DEVICE_BIT_DEFAULT,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -365,7 +386,11 @@ enum {
                                AUDIO_DEVICE_IN_DGTL_DOCK_HEADSET |
                                AUDIO_DEVICE_IN_USB_ACCESSORY |
                                AUDIO_DEVICE_IN_USB_DEVICE |
-                               AUDIO_DEVICE_IN_DEFAULT),
+                               AUDIO_DEVICE_IN_DEFAULT
+                               // PEKALL FMR begin:
+                               | AUDIO_DEVICE_IN_FM_RX
+                               // PEKALL FMR end
+                               ),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
 };
 
@@ -436,8 +461,23 @@ static const audio_offload_info_t AUDIO_INFO_INITIALIZER = {
     size: sizeof(audio_offload_info_t),
 };
 
+// PEKALL FMR begin:
+static inline bool audio_is_fm_device(audio_devices_t device)
+{
+    if (device & AUDIO_DEVICE_OUT_FM)
+        return true;
+
+    return false;
+}
+// PEKALL FMR end
+
 static inline bool audio_is_output_device(audio_devices_t device)
 {
+    // PEKALL FMR begin:
+    if (audio_is_fm_device(device))
+        return true;
+    // PEKALL FMR end
+
     if (((device & AUDIO_DEVICE_BIT_IN) == 0) &&
             (popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL) == 0))
         return true;
@@ -447,6 +487,11 @@ static inline bool audio_is_output_device(audio_devices_t device)
 
 static inline bool audio_is_input_device(audio_devices_t device)
 {
+    // PEKALL FMR begin:
+    if (device & AUDIO_DEVICE_IN_FM_RX)
+        return true;
+    // PEKALL FMR end
+
     if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
         device &= ~AUDIO_DEVICE_BIT_IN;
         if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_IN_ALL) == 0))
