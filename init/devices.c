@@ -49,6 +49,7 @@
 #include "util.h"
 #include "log.h"
 #include "parser.h"
+#include "init_parser.h"
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
@@ -104,6 +105,8 @@ struct platform_node {
 };
 
 static list_declare(lmodalias);
+list_declare(ltriggers);
+
 static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
@@ -786,7 +789,10 @@ static void handle_module_loading(const char *modalias)
 static void handle_device_event(struct uevent *uevent)
 {
     if (!strcmp(uevent->action,"add")) {
-        handle_module_loading(uevent->modalias);
+        if (uevent->modalias) {
+                handle_module_loading(uevent->modalias);
+                handle_modalias_triggers(uevent->modalias);
+        }
     }
 
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
@@ -1064,4 +1070,18 @@ void device_init(void)
 int get_device_fd()
 {
     return device_fd;
+}
+
+void handle_modalias_triggers(const char* modalias)
+{
+    struct listnode* node_ptr;
+    struct alias_trigger_node* node;
+    int i;
+
+    list_for_each(node_ptr, &ltriggers) {
+        node = node_to_item(node_ptr, struct alias_trigger_node, plist);
+        if (!fnmatch(node->pattern, modalias, 0)) {
+            node->func(node->nargs, node->args);
+        }
+    }
 }

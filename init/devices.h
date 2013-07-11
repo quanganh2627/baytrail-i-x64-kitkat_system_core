@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 
 extern void handle_device_fd();
+extern void handle_modalias_triggers(const char* modalias);
 extern void device_init(void);
 extern int module_probe(const char *alias);
 extern int add_dev_perms(const char *name, const char *attr,

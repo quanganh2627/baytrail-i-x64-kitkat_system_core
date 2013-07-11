@@ -39,4 +39,13 @@ void clear_action_list();
 int init_parse_config_file(const char *fn);
 int expand_props(char *dst, const char *src, int len);
 
+struct alias_trigger_node {
+    char* pattern;
+    char** args;
+    int nargs;
+    int (*func)(int nargs, char **args);
+    struct listnode plist;
+};
+
+
 #endif
