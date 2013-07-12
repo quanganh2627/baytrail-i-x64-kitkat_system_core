@@ -31,8 +31,52 @@
 #include "../utility.h"
 #include "../machine.h"
 
+#include <cutils/properties.h>
+#include <dlfcn.h>
+
+// dump specific process data. This data are defined by external library
+typedef void (*dump_ps_data_t)(log_t* log, pid_t tid, uintptr_t addr, bool at_fault);
+
+static void dump_specific_ps_info(log_t* log, pid_t tid, uintptr_t addr, bool at_fault) {
+    // Used to get global properties
+    char propertyBuffer[PROPERTY_VALUE_MAX];
+    memset(propertyBuffer, 0, PROPERTY_VALUE_MAX); // zero out buffer so we don't use junk
+    property_get("system.debug.plugins", propertyBuffer, NULL);
+    _LOG(log, !at_fault, "\ndump_specific_ps_info: library name: %s\n", propertyBuffer);
+
+    // open the library. Now name used 'as is'
+    if (propertyBuffer[0] == 0) {
+        return;
+    }
+
+    void* handle = dlopen(propertyBuffer, RTLD_LAZY);
+    if (!handle) {
+        _LOG(log, !at_fault, "\ndump_specific_ps_info: can't open library %s\n", propertyBuffer);
+        return; // no library
+    }
+
+    // reset errors
+    dlerror();
+    dump_ps_data_t dump_ps_data = (dump_ps_data_t) dlsym(handle, "dump_ps_data");
+    const char *dlsym_error = dlerror();
+    if (dlsym_error) {
+        _LOG(log, !at_fault, "\ndump_specific_ps_info: no required method in library\n");
+        dlclose(handle);
+        return;
+    }
+
+    dump_ps_data(log, tid, addr, at_fault);
+    dlclose(handle);
+}
+
 void dump_memory_and_code(const ptrace_context_t* context __attribute((unused)),
         log_t* log, pid_t tid, bool at_fault) {
+    struct pt_regs_x86 r;
+
+    if (ptrace(PTRACE_GETREGS, tid, 0, &r)) {
+        return;
+    }
+    dump_specific_ps_info(log, tid, (uintptr_t)r.eip, at_fault);
 }
 
 void dump_registers(const ptrace_context_t* context __attribute((unused)),
