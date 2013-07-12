@@ -58,12 +58,13 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 
 #include "keywords.h"
 
-#define KEYWORD(symbol, flags, nargs, func) \
-    [ K_##symbol ] = { #symbol, func, nargs + 1, flags, },
+#define KEYWORD(symbol, flags, nargs, func, uev_func) \
+    [ K_##symbol ] = { #symbol, func, uev_func, nargs + 1, flags, },
 
 struct {
     const char *name;
     int (*func)(int nargs, char **args);
+    int (*uev_func)(int nargs, char **args);
     unsigned char nargs;
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
@@ -75,6 +76,7 @@ struct {
 #define kw_is(kw, type) (keyword_info[kw].flags & (type))
 #define kw_name(kw) (keyword_info[kw].name)
 #define kw_func(kw) (keyword_info[kw].func)
+#define kw_uev_func(kw) (keyword_info[kw].uev_func ? keyword_info[kw].uev_func : keyword_info[kw].func )
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
 int lookup_keyword(const char *s)
