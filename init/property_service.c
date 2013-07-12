@@ -595,6 +595,7 @@ void start_property_service(void)
 
     listen(fd, 8);
     property_set_fd = fd;
+    load_properties_from_file(PROP_PATH_UEVENTD);
 }
 
 int get_property_set_fd()

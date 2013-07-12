@@ -52,6 +52,14 @@
 
 #include <private/android_filesystem_config.h>
 
+#ifndef PROPERTY_VALUE_MAX
+#  define PROPERTY_VALUE_MAX 92
+#endif
+
+#ifndef PROPERTY_KEY_MAX
+#  define PROPERTY_KEY_MAX 32
+#endif
+
 void add_environment(const char *name, const char *value);
 
 extern int init_module(void *, unsigned long, const char *);
@@ -623,6 +631,64 @@ int do_setprop(int nargs, char **args)
     }
     property_set(name, prop_val);
     return 0;
+}
+
+static int append_to_file(const char* path, const char *data, size_t len)
+{
+    int fd = -1;
+    int ret = 0;
+
+    fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY | O_CREAT | O_APPEND, 0640));
+    if (fd < 0) {
+        ERROR("Failed to open %s (%s)",
+              path, strerror(errno));
+        return -errno;
+    }
+
+    if (TEMP_FAILURE_RETRY(write(fd, data, len)) != (int) len) {
+        ERROR("Failed to write %s in %s (%s)",
+              data, path, strerror(errno));
+        ret = -errno;
+    }
+
+    close(fd);
+    return ret;
+}
+
+static int uevent_temporary_setprop(char* name, char* prop_val)
+{
+    /*  "key" + "=" + "value" + "\n\0" */
+    char buff[PROPERTY_KEY_MAX + 1 + PROPERTY_VALUE_MAX + 2];
+    int len = -1;
+
+    len = snprintf(buff, sizeof(buff), "%s=%s\n", name, prop_val);
+
+    append_to_file(PROP_PATH_UEVENTD, buff, (len >= (int) sizeof(buff) ? sizeof(buff) : len));
+
+    return 0;
+}
+
+int do_ext_setprop(int nargs, char **args)
+{
+    const char *name = args[1];
+    const char *value = args[2];
+    char prop_val[PROP_VALUE_MAX];
+    int ret;
+
+    ret = expand_props(prop_val, value, sizeof(prop_val));
+    if (ret) {
+        ERROR("cannot expand '%s' while assigning to '%s'\n", value, name);
+        return -EINVAL;
+    }
+    if ((ret = __system_property_set(name, prop_val)) < 0) {
+        /*
+         * property_service is not running at this time so we put the
+         * properties in temporary space.
+         */
+        ret = uevent_temporary_setprop(name, prop_val);
+    }
+
+    return ret;
 }
 
 int do_setrlimit(int nargs, char **args)
