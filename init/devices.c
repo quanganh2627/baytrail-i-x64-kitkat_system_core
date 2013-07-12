@@ -59,7 +59,7 @@
 #define CRDA_BIN_PATH   "/system/bin/crda"
 #define PLATFORM_STR    "platform"
 #define CHANGE_STR      "change"
-#define MODULES_BLKLST  "/system/etc/ueventd.modules.blacklist"
+#define MODULES_BLKLST  "/ueventd.modules.blacklist"
 
 #ifdef HAVE_SELINUX
 extern struct selabel_handle *sehandle;
