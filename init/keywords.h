@@ -24,6 +24,7 @@ int do_setcon(int nargs, char **args);
 int do_setenforce(int nargs, char **args);
 int do_setkey(int nargs, char **args);
 int do_setprop(int nargs, char **args);
+int do_ext_setprop(int nargs, char **args);
 int do_setrlimit(int nargs, char **args);
 int do_setsebool(int nargs, char **args);
 int do_start(int nargs, char **args);
@@ -80,7 +81,7 @@ enum {
     KEYWORD(setenforce,  COMMAND, 1, do_setenforce, 0)
     KEYWORD(setenv,      OPTION,  2, 0, 0)
     KEYWORD(setkey,      COMMAND, 0, do_setkey, 0)
-    KEYWORD(setprop,     COMMAND, 2, do_setprop, 0)
+    KEYWORD(setprop,     COMMAND, 2, do_setprop, do_ext_setprop)
     KEYWORD(setrlimit,   COMMAND, 3, do_setrlimit, 0)
     KEYWORD(setsebool,   COMMAND, 1, do_setsebool, 0)
     KEYWORD(socket,      OPTION,  0, 0, 0)
