@@ -832,10 +832,6 @@ static void halt_reboot_poweroff(int sig)
     pid_t pid;
     int cmd;
     char arg[64];
-    static int rebooted = 0;
-
-    if (rebooted == 1) return;
-    rebooted = 1;
 
     read_sig(sig, &cmd, arg);
     ERROR("System is going down now! cmd=%lx, arg=%s", cmd, arg);

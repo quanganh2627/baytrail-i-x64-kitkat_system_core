@@ -265,12 +265,11 @@ void reset_signal_handler(void)
 {
     unsigned int i;
     sigset_t set;
-    signal(SIGCHLD, SIG_IGN);
-    signal(SIGUSR1, SIG_IGN);
     for (i = 0; i < sizeof(signal_array)/sizeof(signal_array[0]); i++) {
         struct signal_set *ss = &signal_array[i];
         signal(ss->sig, SIG_DFL);
     }
+    signal(SIGCHLD, SIG_IGN);
     sigfillset(&set);
     sigprocmask(SIG_UNBLOCK, &set, NULL);
 }
