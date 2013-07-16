@@ -46,7 +46,6 @@
 #include <cutils/list.h>
 #include <cutils/sockets.h>
 #include <cutils/iosched_policy.h>
-#include <cutils/android_reboot.h>
 #include <private/android_filesystem_config.h>
 #include <termios.h>
 
@@ -826,38 +825,9 @@ static int personality_init_action(int nargs, char **args)
     return 0;
 }
 
-static void halt_reboot_poweroff(int sig)
-{
-    sigset_t set;
-    pid_t pid;
-    int cmd;
-    char arg[64];
-
-    read_sig(sig, &cmd, arg);
-    ERROR("System is going down now! cmd=%lx, arg=%s", cmd, arg);
-
-    reset_signal_handler();
-    kill_user_space_tasks();
-
-    /*really reboot*/
-    pid = vfork();
-    if (pid == 0) {
-        really_reboot(cmd, arg);
-        _exit(0);
-    }
-    while(1)
-        sleep(1);
-}
-
-static void install_sigs(int sig)
-{
-    install_signal_handler(halt_reboot_poweroff);
-}
-
 static int signal_init_action(int nargs, char **args)
 {
     signal_init();
-    signal(SIGUSR1, install_sigs);
     return 0;
 }
 
