@@ -773,7 +773,7 @@ static void export_kernel_boot_props(void)
         const char *dest_prop;
         const char *def_val;
     } prop_map[] = {
-        { "ro.boot.serialno", "ro.serialno", "", },
+        { "ro.boot.serialno", "ro.serialno", NULL, },
         { "ro.boot.mode", "ro.bootmode", "unknown", },
         { "ro.boot.baseband", "ro.baseband", "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
@@ -783,7 +783,7 @@ static void export_kernel_boot_props(void)
         ret = property_get(prop_map[i].src_prop, tmp);
         if (ret > 0)
             property_set(prop_map[i].dest_prop, tmp);
-        else
+        else if (prop_map[i].def_val)
             property_set(prop_map[i].dest_prop, prop_map[i].def_val);
     }
 
