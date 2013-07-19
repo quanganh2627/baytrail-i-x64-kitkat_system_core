@@ -37,7 +37,6 @@
 #include <linux/capability.h>
 #include <linux/prctl.h>
 #include <sys/mount.h>
-#include <cutils/android_reboot.h>
 #else
 #include "usb_vendors.h"
 #endif
@@ -1086,41 +1085,6 @@ static int should_drop_privileges() {
 }
 #endif /* !ADB_HOST */
 
-#if !ADB_HOST
-static int check_and_adb_reboot(void)
-{
-    int pid = 0, ret = 0;
-    char value[PROPERTY_VALUE_MAX];
-
-    property_get("service.adb.reboot", value, "");
-    if(strcmp(value, "1") != 0) return 0;
-    property_set("service.adb.reboot", "0");
-
-    property_get("service.adb.reboot.arg", value, "");
-    sync();
-
-    /* Attempt to unmount the SD card first.
-     * No need to bother checking for errors.
-     */
-    pid = fork();
-    if (pid == 0) {
-        /* ask vdc to unmount it */
-        execl("/system/bin/vdc", "/system/bin/vdc", "volume", "unmount",
-                getenv("EXTERNAL_STORAGE"), "force", NULL);
-    } else if (pid > 0) {
-        /* wait until vdc succeeds or fails */
-        waitpid(pid, &ret, 0);
-    }
-
-    android_reboot(ANDROID_RB_RESTART2, 0, (char *) value);
-    if (ret < 0) {
-        D("reboot failed: %s\n", strerror(errno));
-        return 0;
-    }
-    return 1;
-}
-#endif
-
 int adb_main(int is_daemon, int server_port)
 {
 #if !ADB_HOST
@@ -1220,12 +1184,6 @@ int adb_main(int is_daemon, int server_port)
             exit(1);
         }
     }
-
-#if !ADB_HOST
-    /* reboot is issued and return */
-    if(check_and_adb_reboot())
-        return 0;
-#endif
 
     int usb = 0;
     if (access(USB_ADB_PATH, F_OK) == 0 || access(USB_FFS_ADB_EP0, F_OK) == 0) {

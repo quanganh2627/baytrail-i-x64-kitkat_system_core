@@ -13,30 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include <unistd.h>
 #include <sys/reboot.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
-#include <signal.h>
-#include <stdlib.h>
 
 #include <cutils/android_reboot.h>
-#include <cutils/klog.h>
-#include <sys/reboot.h>
-#include <dirent.h>
-
-static struct signal_set signal_array[] = {
-    {SIGUSR2, ANDROID_RB_POWEROFF, ""},
-    {SIGTERM, ANDROID_RB_RESTART, ""},
-    {SIGHUP, ANDROID_RB_RESTART2, "android"},
-    {SIGINT, ANDROID_RB_RESTART2, "recovery"},
-    {SIGQUIT, ANDROID_RB_RESTART2, "bootloader"},
-    {SIGTSTP, ANDROID_RB_RESTART2, "fastboot"},
-};
 
 /* Check to see if /proc/mounts contains any writeable filesystems
  * backed by a block device.
@@ -114,170 +100,16 @@ static void remount_ro(void)
     return;
 }
 
-static int check_user_task(int pid)
-{
-    int fd,r;
-    char cmdline[1024];
 
-    // Ignore /init
-    if(pid == 1)
-        return 0;
-
-    snprintf(cmdline, sizeof(cmdline), "/proc/%d/cmdline", pid);
-    fd = open(cmdline, O_RDONLY);
-    if(fd == 0) {
-        r = 0;
-    } else {
-        r = read(fd, cmdline, 1023);
-        close(fd);
-        if(r < 0) r = 0;
-    }
-    cmdline[r] = 0;
-
-    // Exclude kernel thread, ia_watchdogd
-    if(r == 0 || strstr(cmdline, "ia_watchdogd"))
-        return 0;
-    return 1;
-}
-
-static int check_process_running(pid_t *pid_array, int pid_count,
-                                 pid_t *pid_running)
-{
-    int i, running = 0;
-    char name[1024];
-    DIR *d;
-
-    for(i = 0;i < pid_count; i++) {
-        snprintf(name, sizeof(name), "/proc/%d/", pid_array[i]);
-        d = opendir(name);
-        if(d != 0) {
-            pid_running[running] = pid_array[i];
-            running++;
-            closedir(d);
-        }
-    }
-    return running;
-}
-
-/* kill all user spaces processes
- * This is a workground because that "ia_watchdogd" is killed may
- * cause immediate system reboot, so exclude it.
- */
-void kill_user_space_tasks(void)
-{
-    DIR *d;
-    struct dirent *de;
-    pid_t pids[2048];
-    pid_t pidrunning[2048];
-    int pidcount = 0, i;
-    int running, sleepcount = 0;
-
-    /*kill(-1, SIGTERM);
-    sync();
-    sleep(1);
-    kill(-1, SIGKILL);
-    sync();
-    sleep(1);*/
-
-    d = opendir("/proc/");
-    if(d == 0) return;
-
-    while((de = readdir(d)) != 0){
-        if(isdigit(de->d_name[0])) {
-            int pid = atoi(de->d_name);
-            if(check_user_task(pid)) {
-	       pids[pidcount++]=pid;
-               pidcount %= 2048;
-            }
-       }
-    }
-    closedir(d);
-
-    for(i=0;i<pidcount;i++) {
-        kill(pids[i], SIGUSR1);
-        kill(pids[i], SIGUSR2);
-        kill(pids[i], SIGTERM);
-        kill(pids[i], SIGKILL);
-    }
-    KLOG_ERROR("init", "Sent SIGTERM & SIGKILL to all processes!");
-
-    running = pidcount;
-    while(running > 0 && sleepcount < 5) {
-        running = check_process_running(pids, pidcount, pidrunning);
-        sleepcount++;
-        sleep(1);
-    }
-    for(i = 0;i < running; i++) {
-         KLOG_ERROR("init", "pid: %d is still alive\n", pidrunning[i]);
-    }
-    KLOG_ERROR("init", "%d/%d processes are killed (%d seconds)", pidcount - running, pidcount, sleepcount);
-
-    return;
-}
-
-static int write_sig(int cmd, char *arg)
-{
-    unsigned int i;
-    for (i = 0; i < sizeof(signal_array)/sizeof(signal_array[0]); i++) {
-        struct signal_set *ss = &signal_array[i];
-        if(cmd == ss->cmd) {
-            if(arg == NULL)
-                return ss->sig;
-            if(!strcmp(arg, ss->arg))
-                return ss->sig;
-        }
-    }
-    if (cmd == ANDROID_RB_RESTART)
-        return SIGTERM;
-    if (cmd == ANDROID_RB_POWEROFF)
-        return SIGUSR2;
-    if (cmd == ANDROID_RB_RESTART2)
-        return SIGHUP;
-    return SIGUSR2;
-}
-
-void read_sig(int sig, int *cmd, char *arg)
-{
-    unsigned int i;
-    for (i = 0; i < sizeof(signal_array)/sizeof(signal_array[0]); i++) {
-        struct signal_set *ss = &signal_array[i];
-        if(sig == ss->sig) {
-            *cmd = ss->cmd;
-            strlcpy(arg, ss->arg, 64);
-            return;
-        }
-    }
-    *cmd = ANDROID_RB_POWEROFF;
-    strlcpy(arg, "", 64);
-}
-
-void install_signal_handler(void(*f)(int))
-{
-    unsigned int i;
-    for (i = 0; i < sizeof(signal_array)/sizeof(signal_array[0]); i++) {
-        struct signal_set *ss = &signal_array[i];
-        signal(ss->sig, f);
-    }
-}
-
-/*reset signal handlers and unblock signals*/
-void reset_signal_handler(void)
-{
-    unsigned int i;
-    sigset_t set;
-    signal(SIGCHLD, SIG_IGN);
-    signal(SIGUSR1, SIG_IGN);
-    for (i = 0; i < sizeof(signal_array)/sizeof(signal_array[0]); i++) {
-        struct signal_set *ss = &signal_array[i];
-        signal(ss->sig, SIG_DFL);
-    }
-    sigfillset(&set);
-    sigprocmask(SIG_UNBLOCK, &set, NULL);
-}
-
-int really_reboot(int cmd, char *arg)
+int android_reboot(int cmd, int flags, char *arg)
 {
     int ret;
+
+    if (!(flags & ANDROID_RB_FLAG_NO_SYNC))
+        sync();
+
+    if (!(flags & ANDROID_RB_FLAG_NO_REMOUNT_RO))
+        remount_ro();
 
     switch (cmd) {
         case ANDROID_RB_RESTART:
@@ -296,23 +128,7 @@ int really_reboot(int cmd, char *arg)
         default:
             ret = -1;
     }
+
     return ret;
-}
-
-int android_reboot(int cmd, int flags, char *arg)
-{
-    int sig = write_sig(cmd, arg);
-
-    /* Send SIGUSR1 to init set reboot cmd and arg */
-    kill(1, SIGUSR1);
-
-    if (!(flags & ANDROID_RB_FLAG_NO_SYNC))
-        sync();
-    if (!(flags & ANDROID_RB_FLAG_NO_REMOUNT_RO))
-        remount_ro();
-
-    /* Send sig to init to reboot/shutdown system */
-    kill(1, sig);
-    return 0;
 }
 
