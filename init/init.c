@@ -46,6 +46,7 @@
 #include <cutils/fs.h>
 #include <private/android_filesystem_config.h>
 #include <termios.h>
+#include <sys/resource.h>
 
 #include <sys/system_properties.h>
 
@@ -347,6 +348,19 @@ void service_start(struct service *svc, const char *dynamic_args)
             }
         }
         arg_ptrs[arg_idx] = NULL;
+
+        /* In zygote, set stack limit to force mmap/heap area initially below 2G, so as to
+         * workaround buggy applications that assume positive memory address.
+         * NOTE: a 64bit kernel allows either a 3G or 4G user space for a 32bit application.
+         * In the case of a 3G user address space, the 0x90000000 magic number is incorrect
+         * and Houdini apps may fail, but tuning has shown it generally allows Houdini apps
+         * to run successfully
+         */
+        if (!strcmp(svc->name, "zygote")) {
+            struct rlimit rlim;
+            rlim.rlim_max = rlim.rlim_cur = 0x90000000;
+            setrlimit(RLIMIT_STACK, &rlim);
+        }
         execve(svc->args[0], (char**) arg_ptrs, (char**) ENV);
         ERROR("cannot execve('%s'): %s\n", svc->args[0], strerror(errno));
         _exit(127);
@@ -844,20 +858,6 @@ static int property_service_init_action(int nargs, char **args)
     return 0;
 }
 
-static int personality_init_action(int nargs, char **args)
-{
-    char pval[PROP_VALUE_MAX];
-    int ret;
-
-    ret = property_get("ro.config.personality", pval);
-    if (ret && !strcmp(pval, "compat_layout")) {
-        int old_personality;
-        old_personality = personality((unsigned long)-1);
-        personality(old_personality | ADDR_COMPAT_LAYOUT);
-    }
-    return 0;
-}
-
 static int signal_init_action(int nargs, char **args)
 {
     signal_init();
@@ -1133,7 +1133,6 @@ int main(int argc, char **argv)
     queue_builtin_action(mix_hwrng_into_linux_rng_action, "mix_hwrng_into_linux_rng");
 
     queue_builtin_action(property_service_init_action, "property_service_init");
-    queue_builtin_action(personality_init_action, "personality_init");
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
