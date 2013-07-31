@@ -125,9 +125,10 @@ void restart_root_service(int fd, void *cookie)
             return;
         }
 
-        property_set("service.adb.root", "1");
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
         writex(fd, buf, strlen(buf));
+        sleep(1);
+        property_set("service.adb.root", "1");
         adb_close(fd);
     }
 }
