@@ -222,7 +222,6 @@ static void local_socket_destroy(asocket  *s)
 #if !ADB_HOST
     if (exit_on_close) {
         D("local_socket_destroy: exiting\n");
-        sleep(1);
         exit(1);
     }
 #endif
