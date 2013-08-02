@@ -109,7 +109,6 @@ struct platform_node {
     struct listnode list;
 };
 
-static list_declare(lmodalias);
 list_declare(ltriggers);
 
 static list_declare(lmod_args);
@@ -251,26 +250,25 @@ const char *get_mod_args(const char *mod_name)
     struct listnode *node = NULL;
     struct mod_arg_node *mod_arg_node = NULL;
     struct mod_args_ *mod_args = NULL;
-    list_declare(module_aliases);
-
-    if (list_empty(&lmodalias)) {
-        parse_alias_to_list("/lib/modules/modules.alias", &lmodalias);
-    }
-
-    if (get_module_name_from_alias(mod_name, &module_aliases, &lmodalias) > 0) {
-        struct module_alias_node *alias;
-        alias = node_to_item(list_head(&module_aliases), struct module_alias_node, list);
-        mod_name = alias->name;
-    }
+    int n1, n2;
 
     list_for_each(node, &lmod_args) {
         mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
         mod_args = &mod_arg_node->mod_args;
-        if (!strcmp(mod_name, mod_args->name)) {
+        n1 = strlen(mod_args->name);
+        if (strncmp(mod_name, mod_args->name, n1))
+            continue;
+        n2 = strlen(mod_name);
+
+        if (n1 == n2)
             return mod_args->args;
+
+        /* mod_name contains .ko at the end */
+        if (n1 + 3 == n2) {
+            if (!strncmp(&mod_name[n1], ".ko", 3))
+                return mod_args->args;
         }
     }
-
     return "";
 }
 
@@ -776,28 +774,37 @@ static void handle_module_loading(const char *modalias)
     char *tmp;
     struct module_alias_node *node;
     int ret;
+    char **dep;
+    char *args;
 
     if (!modalias) return;
 
     handle_deferred_module_loading();
 
-    ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
+    ret = get_module_dep(modalias, NULL, 1, MODULES_BLKLST, &dep);
 
-    if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
-        node = calloc(1, sizeof(*node));
-        if (node) {
-            node->pattern = strdup(modalias);
-            if (!node->pattern) {
-                free(node);
+    if (ret) {
+        if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
+            node = calloc(1, sizeof(*node));
+            if (node) {
+                node->pattern = strdup(modalias);
+                if (!node->pattern) {
+                    free(node);
+                } else {
+                    list_add_tail(&deferred_module_loading_list, &node->list);
+                    INFO("add to queue for deferred module loading: %s",
+                            node->pattern);
+                }
             } else {
-                list_add_tail(&deferred_module_loading_list, &node->list);
-                INFO("add to queue for deferred module loading: %s",
-                        node->pattern);
+                ERROR("failed to allocate memory to store device id for deferred module loading.\n");
             }
-        } else {
-            ERROR("failed to allocate memory to store device id for deferred module loading.\n");
         }
+        return;
     }
+    args = get_mod_args(dep[0]);
+    INFO("Loading module %s, args %s\n", dep[0], args);
+    insmod_s(dep, args, 1, NULL);
+    free_dep_list(dep);
 }
 
 static void handle_device_event(struct uevent *uevent)
