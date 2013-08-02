@@ -81,6 +81,7 @@ struct {
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
     { "gps.",             AID_GPS,      0 },
+    { "wpa_supplicant.",  AID_WIFI,     0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
