@@ -245,7 +245,7 @@ static int insmod(const char *path_name, const char *args)
  * base    : a prefix to module path, it will NOT be affected by strip flag.
  * return  : 0 for success or nothing to do; non-zero when any error occurs.
  */
-static int insmod_s(char *dep[], const char *args, int strip, const char *base)
+int insmod_s(char *dep[], const char *args, int strip, const char *base)
 {
     char *name;
     char *path_name;
@@ -477,62 +477,86 @@ static void dump_black_list(struct listnode *black_list_head)
             ALOGE("DUMP BLACK: [%s]\n", blacklist->name);
     }
 }
-/* insmod_by_dep() interface to outside,
- * refer to its description in probe_module.h
- */
-int insmod_by_dep(const char *module_name,
-        const char *args,
-        const char *dep_name,
-        int strip,
-        const char *base,
-        const char *blacklist)
+
+void free_dep_list(char **dep)
 {
-    void *dep_file = NULL;
-    char **dep = NULL;
-    int ret = MOD_UNKNOWN;
+    int i;
+    if (dep) {
+        for (i = 0; dep[i]; i++) {
+            free(dep[i]);
+        }
+        free(dep);
+    }
+}
+
+static int validate_module(const char *module_name, char *dep_file, struct listnode *extra_blacklist, char ***dep)
+{
+
+    *dep = look_up_dep(module_name, dep_file);
+
+    if (!(*dep)) {
+        ALOGE("%s: cannot find module's dependency info: [%s]\n", __FUNCTION__, module_name);
+        return MOD_DEP_NOT_FOUND;
+    }
+
+    if (is_dep_in_blacklist(*dep, extra_blacklist)) {
+        ALOGE("%s: a module is in caller's black list, stop further loading\n", __FUNCTION__);
+        free_dep_list(*dep);
+        return MOD_IN_CALLER_BLACK;
+    }
+    return 0;
+}
+
+int get_module_dep(const char *module_name,
+        const char *dep_name,
+        int cached,
+        const char *blacklist,
+        char ***dep)
+{
+    static void *dep_file = NULL;
+
     int i = 0;
     struct listnode *alias_node;
     struct module_alias_node *alias;
-    list_declare(base_blacklist);
-    list_declare(extra_blacklist);
-    list_declare(alias_list);
+    static list_declare(extra_blacklist);
+    static list_declare(alias_list);
     list_declare(module_aliases);
+    int ret;
+
+    ret = MOD_UNKNOWN;
 
     if (!module_name || *module_name == '\0') {
         ALOGE("need valid module name\n");
-
         return MOD_INVALID_NAME;
     }
 
-    ret = parse_alias_to_list("/lib/modules/modules.alias", &alias_list);
+    if (!cached || list_empty(&alias_list)) {
+        ret = parse_alias_to_list("/lib/modules/modules.alias", &alias_list);
 
-    if (ret) {
-        ALOGE("%s: parse alias error %d\n", __FUNCTION__, ret);
-        ret = MOD_BAD_ALIAS;
-
-        goto free_file;
-    }
-
-    /* We allow no base blacklist. */
-    /* TODO: tell different cases between no caller black list and parsing failures. */
-    ret = parse_blacklist_to_list("/system/etc/modules.blacklist", &base_blacklist);
-
-    if (ret)
-        ALOGI("%s: parse base black list error %d\n", __FUNCTION__, ret);
-
-    if (blacklist && *blacklist != '\0') {
-        ret = parse_blacklist_to_list(blacklist, &extra_blacklist);
         if (ret) {
-            ALOGI("%s: parse extra black list error %d\n", __FUNCTION__, ret);
-
-            /* A black list from caller is optional, but when caller does
-             * give us a file and something's wrong with it, we will stop going further*/
-            ret = MOD_INVALID_CALLER_BLACK;
-
-            goto free_file;
+            ALOGE("%s: parse alias error %d\n", __FUNCTION__, ret);
+            free_alias_list(&alias_list);
+            return MOD_BAD_ALIAS;
         }
     }
-    dep_file = load_dep_file(dep_name);
+
+    if (blacklist && *blacklist != '\0') {
+        if (!cached || list_empty(&extra_blacklist)) {
+            ret = parse_blacklist_to_list(blacklist, &extra_blacklist);
+            if (ret) {
+                ALOGI("%s: parse extra black list error %d\n", __FUNCTION__, ret);
+
+                /* A black list from caller is optional, but when caller does
+                 * give us a file and something's wrong with it, we will stop going further*/
+                ret = MOD_INVALID_CALLER_BLACK;
+                free_black_list(&extra_blacklist);
+                goto free_file;
+            }
+        }
+    }
+
+    if (!cached || dep_name || !dep_file)
+        dep_file = load_dep_file(dep_name);
 
     if (!dep_file) {
         ALOGE("cannot load dep file : %s\n", dep_name);
@@ -543,71 +567,51 @@ int insmod_by_dep(const char *module_name,
 
     /* check if module name is an alias. */
     if (get_module_name_from_alias(module_name, &module_aliases, &alias_list) <= 0) {
-        /* If no alias found, put a single node in list containing module_name, so it will
-         * be processed in the loop below. This is done for simplifying the code. */
-        alias = calloc(1, sizeof(*alias));
-        if (!alias) {
-            ret = MOD_BAD_ALIAS;
-            goto free_file;
-        }
-        alias->name = strdup(module_name);
-        if (!alias->name) {
-            free(alias);
-            ret = MOD_BAD_ALIAS;
-            goto free_file;
-        }
-        list_add_tail(&module_aliases, &alias->list);
-    }
+        ret = validate_module(module_name, dep_file, &extra_blacklist, dep);
+    } else {
+        list_for_each(alias_node, &module_aliases) {
+            alias = node_to_item(alias_node, struct module_alias_node, list);
 
-    list_for_each(alias_node, &module_aliases) {
-        alias = node_to_item(alias_node, struct module_alias_node, list);
-        /* Before looking for deps, check if we have previous deps, because we need to free them */
-        if (dep) {
-            for (i = 0; dep[i]; i++) {
-                free(dep[i]);
+            ret = validate_module(alias->name, dep_file, &extra_blacklist, dep);
+
+            if (ret == 0) {
+                goto free_file;
             }
-            free(dep);
-            dep = NULL;
         }
-        dep = look_up_dep(alias->name, dep_file);
-
-        if (!dep) {
-            ALOGE("%s: cannot find module's dependency info: [%s]\n", __FUNCTION__, alias->name);
-            ret = MOD_DEP_NOT_FOUND;
-            continue;
-        }
-
-        if (is_dep_in_blacklist(dep, &extra_blacklist)) {
-            ALOGE("%s: a module is in caller's black list, stop further loading\n", __FUNCTION__);
-            ret = MOD_IN_CALLER_BLACK;
-            continue;
-        }
-
-        if (is_dep_in_blacklist(dep, &base_blacklist)) {
-            ALOGE("%s: a module is in system black list, stop further loading\n", __FUNCTION__);
-            ret = MOD_IN_BLACK;
-            continue;
-        }
-
-        if (ret) /* if we reach here for a dep, update ret to the latest result */
-            ret = insmod_s(dep, args, strip, base);
-        else /* we have had a successfull loading, ignore further errors */
-            insmod_s(dep, args, strip, base);
     }
 
 free_file:
-    if (dep) {
-        for (i = 0; dep[i]; i++) {
-            free(dep[i]);
-        }
-        free(dep);
+    if (!cached) {
+        free(dep_file);
+        dep_file = NULL;
+        free_alias_list(&alias_list);
+        free_black_list(&extra_blacklist);
     }
-    free(dep_file);
-    free_alias_list(&alias_list);
     free_alias_list(&module_aliases);
-    free_black_list(&base_blacklist);
-    free_black_list(&extra_blacklist);
+    return ret;
+}
 
+/* insmod_by_dep() interface to outside,
+ * refer to its description in probe_module.h
+ */
+int insmod_by_dep(const char *module_name,
+        const char *args,
+        const char *dep_name,
+        int strip,
+        const char *base,
+        const char *blacklist)
+{
+    char **dep;
+    int ret;
+
+    ret = get_module_dep(module_name, dep_name, 0, blacklist, &dep);
+
+    if (ret)
+        return ret;
+
+    ret = insmod_s(dep, args, strip, base);
+
+    free_dep_list(dep);
     return ret;
 }
 
