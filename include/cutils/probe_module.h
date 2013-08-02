@@ -31,6 +31,15 @@ extern "C" {
 #define MOD_INVALID_CALLER_BLACK    (1 << 6)    /* Caller provides invalid black list or it's parsing failed. */
 #define MOD_INVALID_NAME            (1 << 7)    /* The module's name or alias is invalid */
 
+extern void free_dep_list(char **dep);
+
+extern int get_module_dep(const char *module_name,
+        const char *dep_name,
+        int cached,
+        const char *blacklist,
+        char ***dep);
+
+extern int insmod_s(char *dep[], const char *args, int strip, const char *base);
 
 /* insmod_by_dep() - load a kernel module (target) with its dependency
  * The module's dependency must be described in the provided dependency file.
