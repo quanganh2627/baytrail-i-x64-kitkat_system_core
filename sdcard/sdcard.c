@@ -828,8 +828,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
         return -errno;
     }
     out.fh = ptr_to_id(h);
-    out.open_flags = 0;
-    out.padding = 0;
+    out.open_flags = FOPEN_FAST_PATH;
+    out.fh_backing = (uint32_t)h->fd;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
@@ -1019,18 +1019,28 @@ static int handle_releasedir(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const struct fuse_init_in* req)
 {
-    struct fuse_init_out out;
+    struct fuse_init_out out_fastpath;
+    struct fuse_init_out_old *out = (struct fuse_init_out_old*)&out_fastpath;
 
     TRACE("[%d] INIT ver=%d.%d maxread=%d flags=%x\n",
             handler->token, req->major, req->minor, req->max_readahead, req->flags);
-    out.major = FUSE_KERNEL_VERSION;
-    out.minor = FUSE_KERNEL_MINOR_VERSION;
-    out.max_readahead = req->max_readahead;
-    out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
-    out.max_background = 32;
-    out.congestion_threshold = 32;
-    out.max_write = MAX_WRITE;
-    fuse_reply(fuse, hdr->unique, &out, sizeof(out));
+    out->major = FUSE_KERNEL_VERSION;
+    out->minor = FUSE_KERNEL_MINOR_VERSION;
+    out->max_readahead = req->max_readahead;
+    out->flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
+    out->max_background = 32;
+    out->congestion_threshold = 32;
+    out->max_write = MAX_WRITE;
+
+    if (req->flags & FUSE_FAST_PATH_ENABLE)
+    {
+        out_fastpath.pid = (uint64_t)getpid();
+        out_fastpath.flags |= FUSE_FAST_PATH_ENABLE;
+        fuse_reply(fuse, hdr->unique, &out_fastpath, sizeof(out_fastpath));
+    }
+    else
+        fuse_reply(fuse, hdr->unique, out, sizeof(out));
+
     return NO_STATUS;
 }
 
