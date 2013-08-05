@@ -102,7 +102,6 @@ static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
-static list_declare(deferred_module_loading_list);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
@@ -711,31 +710,6 @@ static void handle_generic_device_event(struct uevent *uevent)
              uevent->major, uevent->minor, links);
 }
 
-static void handle_deferred_module_loading()
-{
-    struct listnode *node = NULL;
-    struct listnode *next = NULL;
-    struct module_alias_node *alias = NULL;
-    int ret = -1;
-
-    list_for_each_safe(node, next, &deferred_module_loading_list) {
-        alias = node_to_item(node, struct module_alias_node, list);
-
-        if (alias->pattern) {
-            INFO("deferred loading of module for %s\n", alias->pattern);
-            ret = insmod_by_dep(alias->pattern, get_mod_args(alias->pattern), NULL, 1, NULL,
-                    MODULES_BLKLST);
-            /* if it looks like file system where these files are is not
-             * ready, keep the module in defer list for retry. */
-            if (!(ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS))) {
-                free(alias->pattern);
-                list_remove(node);
-                free(alias);
-            }
-        }
-    }
-}
-
 int module_probe(const char *modalias)
 {
     return insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
@@ -751,28 +725,11 @@ static void handle_module_loading(const char *modalias)
 
     if (!modalias) return;
 
-    handle_deferred_module_loading();
-
     ret = get_module_dep(modalias, NULL, 1, MODULES_BLKLST, &dep);
 
-    if (ret) {
-        if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
-            node = calloc(1, sizeof(*node));
-            if (node) {
-                node->pattern = strdup(modalias);
-                if (!node->pattern) {
-                    free(node);
-                } else {
-                    list_add_tail(&deferred_module_loading_list, &node->list);
-                    INFO("add to queue for deferred module loading: %s",
-                            node->pattern);
-                }
-            } else {
-                ERROR("failed to allocate memory to store device id for deferred module loading.\n");
-            }
-        }
+    if (ret)
         return;
-    }
+
     args = get_mod_args(dep[0]);
     INFO("Loading module %s, args %s\n", dep[0], args);
     insmod_s(dep, args, 1, NULL);
