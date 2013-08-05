@@ -52,7 +52,6 @@ struct parse_state
     int nexttoken;
     void *context;
     void (*parse_line)(struct parse_state *state, int nargs, char **args, struct listnode *head);
-    const char *filename;
     void *priv;
 };
 
@@ -321,30 +320,16 @@ int module_parser(const char *file_name, int mode, struct listnode *head)
     char *args[3];
     int nargs;
     char *data = NULL;
-    char *fn;
     int ret = -1;
     int args_to_read = 0;
 
-    if (mode == READ_MODULES_ALIAS) {
-        /* read modules.alias */
-        if (asprintf(&fn, "%s", file_name) <= 0)
-            goto out;
-
-    } else if (mode == READ_MODULES_BLKLST) {
-        /* read modules.blacklist */
-        if (asprintf(&fn, "%s", file_name) <= 0)
-            goto out;
-    } else /* unknown mode */
-        return ret;
-
     /* read the whole file */
-    data = load_file(fn, 0);
+    data = load_file(file_name, 0);
     if (!data)
         goto out;
 
     /* invoke tokenizer */
     nargs = 0;
-    state.filename = fn;
     state.line = 1;
     state.ptr = data;
     state.nexttoken = 0;
