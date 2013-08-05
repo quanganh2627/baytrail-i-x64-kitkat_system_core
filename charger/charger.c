@@ -81,10 +81,12 @@
 #define TEMP_SENS_VAL                "/temp"
 #define TEMP_MON_TYPE_FRONT_SKIN     "skin0"
 #define TEMP_MON_TYPE_BACK_SKIN      "skin1"
+#define TEMP_MON_TYPE_BATTERY        "battery"
 
 /* temperature is in mC */
 #define CRIT_TEMP_THRESH_FRONT_SKIN  64000
 #define CRIT_TEMP_THRESH_BACK_SKIN   74000
+#define CRIT_TEMP_THRESH_BATTERY     60000
 
 #define INVALID_BATT_MODEL "UNKNOWN"
 
@@ -988,6 +990,7 @@ static int get_temp_interface(char *sensor_name)
     int ret = -1;
     static int index_skin0 = -1;
     static int index_skin1 = -1;
+    static int index_battery = -1;
 
     if (!sensor_name)
         return ret;
@@ -997,6 +1000,8 @@ static int get_temp_interface(char *sensor_name)
         return index_skin0;
     else if ((!strcmp(sensor_name, "skin1") || !strcmp(sensor_name, "SYSTHERM1")) && index_skin1 != -1)
         return index_skin1;
+    else if (strstr(sensor_name, "battery") && index_battery != -1)
+        return index_battery;
 
     snprintf(path, sizeof(path), "%s%d%s", TEMP_BASE_PATH, sensor_count, TEMP_SENS_TYPE);
     memset(buf, 0, sizeof(buf));
@@ -1004,7 +1009,7 @@ static int get_temp_interface(char *sensor_name)
      * Assumption is if file doesnt exist for a given sensor_count,
      * no file exist for a higher sensor_count */
     while (read_file(path, buf, sizeof(buf)) >= 0) {
-         if (!strcmp(buf, sensor_name)){
+         if (strstr(buf, sensor_name)){
              ret = sensor_count;
              break;
          }
@@ -1019,18 +1024,20 @@ static int get_temp_interface(char *sensor_name)
 
     if (!strcmp(sensor_name, "skin0") || !strcmp(sensor_name, "SYSTHERM0"))
         index_skin0 = ret;
-    else
+    else if (!strcmp(sensor_name, "skin1") || !strcmp(sensor_name, "SYSTHERM1"))
         index_skin1 = ret;
+    else if (strstr(sensor_name, "battery"))
+        index_battery = ret;
 
     return ret;
 }
 
 static void handle_temperature_state(struct charger *charger)
 {
-    int temp_front, temp_back;
-    int sensor_type_front, sensor_type_back;
+    int temp_front, temp_back, temp_battery;
+    int sensor_type_front, sensor_type_back, sensor_type_battery;
     int ret;
-    char path_front[PATH_MAX], path_back[PATH_MAX];
+    char path_front[PATH_MAX], path_back[PATH_MAX], path_battery[PATH_MAX];
 
     sensor_type_front = get_temp_interface(TEMP_MON_TYPE_FRONT_SKIN);
     if (sensor_type_front < 0) {
@@ -1045,6 +1052,10 @@ static void handle_temperature_state(struct charger *charger)
         if (sensor_type_back < 0)
            return;
     }
+
+    sensor_type_battery = get_temp_interface(TEMP_MON_TYPE_BATTERY);
+    if (sensor_type_battery < 0)
+        return;
 
     snprintf(path_front, sizeof(path_front), "%s%d%s", TEMP_BASE_PATH,
              sensor_type_front, TEMP_SENS_VAL);
@@ -1065,14 +1076,24 @@ static void handle_temperature_state(struct charger *charger)
         return;
     }
 
+    snprintf(path_battery, sizeof(path_battery), "%s%d%s", TEMP_BASE_PATH,
+             sensor_type_battery, TEMP_SENS_VAL);
+
+    ret = read_file_int(path_battery, &temp_battery);
+    if (ret < 0) {
+        LOGE("Unable to open/read file %s\n", path_battery);
+        return;
+    }
+
     if (temp_front >= CRIT_TEMP_THRESH_FRONT_SKIN ||
-        temp_back >= CRIT_TEMP_THRESH_BACK_SKIN) {
+        temp_back >= CRIT_TEMP_THRESH_BACK_SKIN ||
+        temp_battery >= CRIT_TEMP_THRESH_BATTERY) {
         autosuspend_disable();
         kick_animation(charger->batt_anim);
 
-        LOGI("Temperature threshold breached: Front_skin_temp:%d, Back_skin_temp:%d\n"
-             "Thresholds: Front:%d, Back:%d\nShutting down system\n", temp_front, temp_back,
-             CRIT_TEMP_THRESH_FRONT_SKIN, CRIT_TEMP_THRESH_BACK_SKIN);
+        LOGI("Temperature threshold breached: Front_skin_temp:%d, Back_skin_temp:%d, Battery_temp:%d\n"
+             "Thresholds: Front:%d, Back:%d, Battery:%d\nShutting down system\n", temp_front, temp_back,
+             temp_battery, CRIT_TEMP_THRESH_FRONT_SKIN, CRIT_TEMP_THRESH_BACK_SKIN, CRIT_TEMP_THRESH_BATTERY);
 
         system("echo 1 > /sys/module/intel_mid_osip/parameters/force_shutdown_occured");
         android_reboot(ANDROID_RB_POWEROFF, 0, 0);
