@@ -932,6 +932,22 @@ int audit_callback(void *data, security_class_t cls, char *buf, size_t len)
 
 #endif
 
+char *bootmodes[] = {
+    "charger",
+    "ramconsole"
+};
+
+int is_special_bootmode(const char *bootmode)
+{
+    unsigned int i;
+
+    for (i = 0; i < ARRAY_SIZE(bootmodes); i++)
+        if (!strcmp(bootmodes[i], bootmode))
+            return 1;
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int fd_count = 0;
@@ -942,7 +958,7 @@ int main(int argc, char **argv)
     int property_set_fd_init = 0;
     int signal_fd_init = 0;
     int keychord_fd_init = 0;
-    bool is_charger = false;
+    bool is_special = false;
 
     /* If we are called as 'modprobe' command, we run as a
      * standalone executable and reuse ueventd's logic to do the job.
@@ -1019,10 +1035,10 @@ int main(int argc, char **argv)
     restorecon("/dev/socket");
 #endif
 
-    is_charger = !strcmp(bootmode, "charger");
+    is_special = is_special_bootmode(bootmode);
 
     INFO("property init\n");
-    if (!is_charger)
+    if (!is_special)
         property_load_boot_defaults();
 
     /* Clear the init.props action list. All the properties
@@ -1042,8 +1058,8 @@ int main(int argc, char **argv)
     /* execute all the boot actions to get us started */
     action_for_each_trigger("init", action_add_queue_tail);
 
-    /* skip mounting filesystems in charger mode */
-    if (!is_charger) {
+    /* skip mounting filesystems in special mode */
+    if (!is_special) {
         action_for_each_trigger("early-fs", action_add_queue_tail);
         action_for_each_trigger("fs", action_add_queue_tail);
         action_for_each_trigger("post-fs", action_add_queue_tail);
@@ -1055,8 +1071,8 @@ int main(int argc, char **argv)
     queue_builtin_action(signal_init_action, "signal_init");
     queue_builtin_action(check_startup_action, "check_startup");
 
-    if (is_charger) {
-        action_for_each_trigger("charger", action_add_queue_tail);
+    if (is_special) {
+        action_for_each_trigger(bootmode, action_add_queue_tail);
     } else {
         action_for_each_trigger("early-boot", action_add_queue_tail);
         action_for_each_trigger("boot", action_add_queue_tail);
