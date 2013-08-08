@@ -96,117 +96,112 @@ static int match_name(const char *s1, const char *s2, const size_t size)
 /* check if a line in dep file is target module's dependency.
  * return 1 when it is, otherwise 0 in any other cases.
  */
-static int is_target_module(char *line, const char *target)
+#define SUFFIX_SIZE 3
+static int is_target_module(char *line, const char *target, size_t line_size)
 {
     char *token;
-    char *name;
     size_t name_len;
-    const char *suffix = ".ko";
-    const char *delimiter = ":";
     int ret = 0;
+    char *s;
 
-    /* search token */
-    token = strstr(line, delimiter);
+    /* search : */
+    token = strchr(line, ':');
 
-    if (!token) {
+    if (!token || token > line + line_size) {
         ALOGE("invalid line: no token\n");
         return 0;
     }
+    /* go backward to first / */
+    for (s = token; *s != '/' && s > line ; s--);
 
-    /* only take stuff before the token */
-    *token = '\0';
+    if (*s == '/')
+        s++;
 
-    /* use "module.ko" in comparision */
-    name_len = strlen(suffix) + strlen(target) + 1;
+    name_len = strlen(target);
 
-    name = malloc(sizeof(char) * name_len);
-
-    if (!name) {
-        ALOGE("cannot alloc ram for comparision\n");
+    /* check length */
+    if (s + name_len + SUFFIX_SIZE != token)
         return 0;
-    }
 
-    snprintf(name, name_len, "%s%s", target, suffix);
+    /* check basename */
+    if (match_name(s, target, name_len))
+        return 0;
 
-    ret = !match_name(strip_path(line), name, name_len);
+    /* check suffix */
+    if (strncmp(".ko", &s[name_len], SUFFIX_SIZE))
+        return 0;
 
-    /* restore [single] token, keep line unchanged until we parse it later */
-    *token = *delimiter;
-
-    free(name);
-
-    return ret;
-
+    return 1;
 }
 
 /* turn a single string into an array of dependency.
  *
- * return: dependency array's address if it succeeded. Caller
- *         is responsible to free the array's memory and also
- *         the array items' memory.
- *         NULL when any error happens.
+ * return: an array of pointer to each dependency,
+ * followed by the dependency strings. so free(dep) is
+ * enough to free everything.
  */
-static char** setup_dep(char *line)
+static char** setup_dep(char *line, size_t line_size)
 {
-    char *token;
-    unsigned int token_size = 0;
     char *start;
     char *end;
-    int dep_num = LDM_INIT_DEP_NUM;
-    char **new;
+    int dep_num = 0;
     int i;
     char **dep = NULL;
+    char *deplist;
+    size_t len;
 
-    dep = malloc(sizeof(char *) * dep_num);
+    /* Count the dependency (by counting space)
+     * to allocate the right size for the array
+     */
+    start = line;
+    end = strchr(start, ' ');
+    for (dep_num = 1; end != NULL && end < line + line_size; end = strchr(start, ' ')) {
+        dep_num++;
+        start = end + 1;
+    }
 
+    /* allocate the dep pointer table and the strings at once */
+    dep = malloc(sizeof(*dep) * (dep_num + 1) + line_size + 1);
     if (!dep) {
         ALOGE("cannot alloc dep array\n");
         return dep;
     }
-    start = line;
 
-    /* All the modules are separated by space, except for the first
-     * module which also has a ':'. A normal line should look like:
-     * dependant_module.ko: dependency1.ko dependency2.ko
+    /* put the deplist after the pointer table */
+    deplist = (char *) &dep[dep_num + 1];
+
+    /* Now copy the line from modules.dep to a list of strings :
+     * main_mod.ko: dep1.ko dep2.ko
+     * into :
+     * main_mod.ko\0\0dep1.ko\0dep2.ko\0
+     * and update pointer array to the beginning of each string.
      */
-    for (i = 0; (end = strchr(start, ' ')) != NULL; i++) {
-        token_size = (end - start);
-        if (token_size == 0)
-            break;
-        /* check if we need enlarge dep array */
-        if (!(i < dep_num - 1)) {
-            dep_num += LDM_INIT_DEP_NUM;
-            new = realloc(dep, dep_num);
-            if (!new) {
-                ALOGE("failed to enlarge dep buffer\n");
-                free(dep);
-                return NULL;
-            }
-            else
-                dep = new;
-        }
-        token = (char*) malloc(sizeof(char) * (token_size + 1));
-        if (!token) {
-            ALOGE("failed to alloc dep token\n");
-            free(dep);
-            return NULL;
-        }
-        strncpy(token, start, token_size);
-        start += (token_size + 1);
-        /* If the token ends with ':', this is the module depending on the others
-         * We will insert it also, but remove the ':', first
-         */
-        if (i == 0 && token[token_size - 1] == ':')
-            token_size -= 1;
-        token[token_size] = '\0';
+    dep[0] = deplist;
+    memcpy(deplist, line, line_size);
+    deplist[line_size] = '\0';
 
-        dep[i] = token;
-
+    start = deplist;
+    for (i = 1 ; i < dep_num ; i++) {
+        end = strchr(start, ' ');
+        if (!end)
+            goto err;
+        *end = '\0';
+        start = end + 1;
+        dep[i] = start;
     }
-    /* terminate array with a null pointer */
-    dep[i] = NULL;
+    /* remove ':' for main module */
+    end = strchr(deplist, ':');
+    if (end)
+        *end = '\0';
 
+    /* terminate array with a null pointer */
+    dep[dep_num] = NULL;
     return dep;
+
+    err:
+    ALOGE("%s Error when parsing modules.dep\n", __FUNCTION__);
+    free(dep);
+    return NULL;
 }
 
 static int insmod(const char *path_name, const char *args)
@@ -345,54 +340,26 @@ static int rmmod_s(char *dep[], unsigned int flags)
  */
 static char ** look_up_dep(const char *module_name, void *dep_file)
 {
-    char *line;
-    char *new_line;
-    unsigned int line_size = 0;
+    unsigned int line_size;
     char *start;
     char *end;
-    char **dep = NULL;
+    char **dep;
 
     if (!dep_file || !module_name || *module_name == '\0')
         return NULL;
 
     start = (char *)dep_file;
-    line = (char *)malloc(sizeof(char) * LDM_DEFAULT_LINE_SZ);
-    if (!line) {
-        ALOGE("failed to alloc dep line buffer\n");
-        return NULL;
-    }
 
     /* We expect modules.dep file has a new line char before EOF. */
     while ((end = strchr(start, '\n')) != NULL) {
         line_size = (end - start);
-        /* line_size + 1, because we will add a space at the end of line */
-        if (line_size + 1 >= LDM_DEFAULT_LINE_SZ) {
-            new_line = realloc(line, LDM_DEFAULT_LINE_SZ * 2);
-            if (!new_line) {
-                ALOGE("failed to enlarge dep line buffer\n");
-                free(line);
-                return NULL;
-            } else {
-                line = new_line;
-            }
+        if (is_target_module(start, module_name, line_size)) {
+            dep = setup_dep(start, line_size);
+            return dep;
         }
-        strncpy(line, start, line_size);
-        /* Add a space to identify last token */
-        line[line_size] = ' ';
-        line[line_size  + 1] = '\0';
-        start += (line_size + 1);
-
-        if (is_target_module(line, module_name)) {
-
-            dep = setup_dep(line);
-            /* job done */
-            break;
-        }
+        start = end + 1;
     }
-
-    free(line);
-
-    return dep;
+    return NULL;
 }
 
 /* load_dep_file() load a dep file (usually it is modules.dep)
@@ -478,17 +445,6 @@ static void dump_black_list(struct listnode *black_list_head)
     }
 }
 
-void free_dep_list(char **dep)
-{
-    int i;
-    if (dep) {
-        for (i = 0; dep[i]; i++) {
-            free(dep[i]);
-        }
-        free(dep);
-    }
-}
-
 static int validate_module(const char *module_name, char *dep_file, struct listnode *extra_blacklist, char ***dep)
 {
 
@@ -501,7 +457,7 @@ static int validate_module(const char *module_name, char *dep_file, struct listn
 
     if (is_dep_in_blacklist(*dep, extra_blacklist)) {
         ALOGE("%s: a module is in caller's black list, stop further loading\n", __FUNCTION__);
-        free_dep_list(*dep);
+        free(*dep);
         return MOD_IN_CALLER_BLACK;
     }
     return 0;
@@ -559,7 +515,7 @@ int get_module_dep(const char *module_name,
         dep_file = load_dep_file(dep_name);
 
     if (!dep_file) {
-        ALOGE("cannot load dep file : %s\n", dep_name);
+        ALOGE("cannot load dep file\n");
         ret = MOD_BAD_DEP;
 
         goto free_file;
@@ -611,7 +567,7 @@ int insmod_by_dep(const char *module_name,
 
     ret = insmod_s(dep, args, strip, base);
 
-    free_dep_list(dep);
+    free(dep);
     return ret;
 }
 

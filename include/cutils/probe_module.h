@@ -31,8 +31,6 @@ extern "C" {
 #define MOD_INVALID_CALLER_BLACK    (1 << 6)    /* Caller provides invalid black list or it's parsing failed. */
 #define MOD_INVALID_NAME            (1 << 7)    /* The module's name or alias is invalid */
 
-extern void free_dep_list(char **dep);
-
 extern int get_module_dep(const char *module_name,
         const char *dep_name,
         int cached,
