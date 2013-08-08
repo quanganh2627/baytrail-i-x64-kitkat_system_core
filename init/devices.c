@@ -761,7 +761,7 @@ static void handle_module_loading(const char *modalias)
     args = get_mod_args(dep[0]);
     INFO("Loading module %s, args %s\n", dep[0], args);
     insmod_s(dep, args, 1, NULL);
-    free_dep_list(dep);
+    free(dep);
 }
 
 static void handle_device_event(struct uevent *uevent)
