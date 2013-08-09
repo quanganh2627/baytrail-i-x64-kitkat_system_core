@@ -131,13 +131,11 @@ int log_main(int argc, char *argv[])
     buffer[0] = '\0';
     remainingChar = sizeof(buffer) - 1;
     for (i = optind ; i < argc && remainingChar; i++) {
-        strncat(&buffer[sizeof(buffer) - remainingChar -1], argv[i], remainingChar);
+        strncat(buffer, argv[i], remainingChar);
         remainingChar -= strlen(argv[i]);
+        if (remainingChar < 1) break;
 
-        if (remainingChar <= 1) break;
-
-        buffer[sizeof(buffer) - remainingChar -1]=' ';
-        buffer[sizeof(buffer) - remainingChar]='\0';
+        strcat(buffer, " ");
         remainingChar--;
     }
 
