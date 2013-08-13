@@ -359,12 +359,14 @@ int module_parser(const char *file_name, int mode, struct listnode *head)
         int token = next_token(&state);
         switch (token) {
         case T_EOF:
-            state.parse_line(&state, 0, 0, head);
+            if (state.parse_line)
+                state.parse_line(&state, 0, 0, head);
             ret = 0;
             goto out;
         case T_NEWLINE:
             if (nargs) {
-                state.parse_line(&state, nargs, args, head);
+                if (state.parse_line)
+                    state.parse_line(&state, nargs, args, head);
                 nargs = 0;
             }
             break;
