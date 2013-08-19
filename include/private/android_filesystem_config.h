@@ -91,6 +91,7 @@
 #define AID_NET_BW_STATS  3006  /* read bandwidth statistics */
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
+#define AID_SEP_GROUP     3700  /* This is for the security processor */
 
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
@@ -166,6 +167,7 @@ static const struct android_id_info android_ids[] = {
     { "net_bt_stack",  AID_NET_BT_STACK, },
 
     { "misc",          AID_MISC, },
+    { "security",  AID_SEP_GROUP },
     { "nobody",        AID_NOBODY, },
 };
 
