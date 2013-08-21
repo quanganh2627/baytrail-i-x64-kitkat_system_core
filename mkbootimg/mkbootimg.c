@@ -346,6 +346,7 @@ int main(int argc, char **argv)
     size_t outsize;
     size_t sig_size_aligned = 0;
     int ret = 1;
+    size_t cmdlen;
 
     argc--;
     argv++;
@@ -449,11 +450,19 @@ int main(int argc, char **argv)
 
     memcpy(hdr.magic, BOOT_MAGIC, BOOT_MAGIC_SIZE);
 
-    if(strlen(cmdline) > (BOOT_ARGS_SIZE - 1)) {
+    cmdlen = strlen(cmdline);
+    if(cmdlen > (BOOT_ARGS_SIZE + BOOT_EXTRA_ARGS_SIZE - 2)) {
         fprintf(stderr,"error: kernel commandline too large\n");
         goto fail;
     }
-    strcpy((char*)hdr.cmdline, cmdline);
+    /* Even if we need to use the supplemental field, ensure we
+     * are still NULL-terminated */
+    strncpy((char *)hdr.cmdline, cmdline, BOOT_ARGS_SIZE - 1);
+    hdr.cmdline[BOOT_ARGS_SIZE - 1] = '\0';
+    if (cmdlen >= (BOOT_ARGS_SIZE - 1)) {
+        cmdline += (BOOT_ARGS_SIZE - 1);
+        strncpy((char *)hdr.extra_cmdline, cmdline, BOOT_EXTRA_ARGS_SIZE);
+    }
 
     kernel_data = load_file(kernel_fn, &hdr.kernel_size);
     if(kernel_data == 0) {
