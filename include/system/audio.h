@@ -239,6 +239,7 @@ enum {
 
     AUDIO_CHANNEL_IN_MONO   = AUDIO_CHANNEL_IN_FRONT,
     AUDIO_CHANNEL_IN_STEREO = (AUDIO_CHANNEL_IN_LEFT | AUDIO_CHANNEL_IN_RIGHT),
+    AUDIO_CHANNEL_IN_FRONT_BACK = (AUDIO_CHANNEL_IN_FRONT | AUDIO_CHANNEL_IN_BACK),
     AUDIO_CHANNEL_IN_ALL    = (AUDIO_CHANNEL_IN_LEFT |
                                AUDIO_CHANNEL_IN_RIGHT |
                                AUDIO_CHANNEL_IN_FRONT |
@@ -301,6 +302,7 @@ enum {
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
+    AUDIO_DEVICE_OUT_WIDI                      = 0x1000000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
@@ -317,6 +319,7 @@ enum {
                                  AUDIO_DEVICE_OUT_USB_ACCESSORY |
                                  AUDIO_DEVICE_OUT_USB_DEVICE |
                                  AUDIO_DEVICE_OUT_REMOTE_SUBMIX |
+                                 AUDIO_DEVICE_OUT_WIDI |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -358,6 +361,13 @@ enum {
                                AUDIO_DEVICE_IN_USB_DEVICE |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
+    // devices not supported for codec offload
+    AUDIO_DEVICE_OUT_NON_OFFLOAD = (AUDIO_DEVICE_OUT_ALL & ~(AUDIO_DEVICE_OUT_SPEAKER |
+                                 AUDIO_DEVICE_OUT_WIRED_HEADSET |
+                                 AUDIO_DEVICE_OUT_WIRED_HEADPHONE |
+                                 AUDIO_DEVICE_OUT_EARPIECE)),
+    // device supporting remote background playback in addition to foreground playback
+    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = AUDIO_DEVICE_OUT_WIDI|AUDIO_DEVICE_OUT_REMOTE_SUBMIX,
 };
 
 typedef uint32_t audio_devices_t;
@@ -382,8 +392,21 @@ typedef enum {
                                         // controls related to voice calls.
     AUDIO_OUTPUT_FLAG_FAST = 0x4,       // output supports "fast tracks",
                                         // defined elsewhere
-    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8 // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
+    AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10, // Use compress offload in DOT
+    AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x20 // used for remote background playback
 } audio_output_flags_t;
+
+typedef enum {
+    AUDIO_OFFLOAD_NONE    = 0x00000000,    // offload none
+    VIDEO_OFFLOAD         = 0x00000001,    // offload audio in AV files
+    EFFECTS_OFFLOAD       = 0x00000002,    // offload effects
+    MC_OFFLOAD            = 0x00000004,    // offload multi channel content
+    AUDIO_OFFLOAD_MP3     = 0x00000100,    // offload MP3
+    AUDIO_OFFLOAD_AAC     = 0x00000200,    // offload AAC
+    AUDIO_OFFLOAD_EAC3    = 0x00000400,    // offload EAC3
+    AUDIO_OFFLOAD_WMA_9   = 0x00000800,    // offload WMA-9
+} audio_offload_format_t;
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {

@@ -58,23 +58,30 @@ char cur_product[FB_RESPONSE_SZ + 1];
 
 void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline);
 
-boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size,
-                        void *ramdisk, unsigned ramdisk_size,
-                        void *second, unsigned second_size,
-                        unsigned page_size, unsigned base,
+boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
+                        void *ramdisk, unsigned ramdisk_size, unsigned ramdisk_offset,
+                        void *second, unsigned second_size, unsigned second_offset,
+                        unsigned page_size, unsigned base, unsigned tags_offset,
                         unsigned *bootimg_size);
 
-static usb_handle *usb = 0;
+static transport_t transport;
 static const char *serial = 0;
 static const char *product = 0;
 static const char *cmdline = 0;
+static const char *host = 0;
 static int wipe_data = 0;
 static unsigned short vendor_id = 0;
 static int long_listing = 0;
 static int64_t sparse_limit = -1;
 static int64_t target_sparse_limit = -1;
 
-static unsigned base_addr = 0x10000000;
+unsigned page_size = 2048;
+unsigned base_addr      = 0x10000000;
+unsigned kernel_offset  = 0x00008000;
+unsigned ramdisk_offset = 0x01000000;
+unsigned second_offset  = 0x00f00000;
+unsigned tags_offset    = 0x00000100;
+
 
 void die(const char *fmt, ...)
 {
@@ -186,11 +193,6 @@ oops:
 }
 #endif
 
-int match_fastboot(usb_ifc_info *info)
-{
-    return match_fastboot_with_serial(info, serial);
-}
-
 int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
 {
     if(!(vendor_id && (info->dev_vendor == vendor_id)) &&
@@ -217,7 +219,24 @@ int match_fastboot_with_serial(usb_ifc_info *info, const char *local_serial)
     return 0;
 }
 
-int list_devices_callback(usb_ifc_info *info)
+int match_fastboot(usb_ifc_info *info)
+{
+    return match_fastboot_with_serial(info, serial);
+}
+
+void list_devices_callback(char *serial, char *path)
+{
+    // output compatible with "adb devices"
+    if (!long_listing) {
+        printf("%s\tfastboot\n", serial);
+    } else if (path) {
+        printf("%-22s fastboot\n", serial);
+    } else {
+        printf("%-22s fastboot %s\n", serial, path);
+    }
+}
+
+int list_devices_callback_usb(usb_ifc_info *info)
 {
     if (match_fastboot_with_serial(info, NULL) == 0) {
         char* serial = info->serial_number;
@@ -227,14 +246,7 @@ int list_devices_callback(usb_ifc_info *info)
         if (!serial[0]) {
             serial = "????????????";
         }
-        // output compatible with "adb devices"
-        if (!long_listing) {
-            printf("%s\tfastboot\n", serial);
-        } else if (!info->device_path) {
-            printf("%-22s fastboot\n", serial);
-        } else {
-            printf("%-22s fastboot %s\n", serial, info->device_path);
-        }
+        list_devices_callback(serial, info->device_path);
     }
 
     return -1;
@@ -258,11 +270,20 @@ usb_handle *open_device(void)
     }
 }
 
+tcp_handle *open_device_tcp(void)
+{
+    static tcp_handle *tcp = 0;
+    if(tcp) return tcp;
+    tcp = tcp_open(host);
+    return tcp;
+}
+
 void list_devices(void) {
     // We don't actually open a USB device here,
     // just getting our callback called so we can
     // list all the connected devices.
-    usb_open(list_devices_callback);
+    usb_open(list_devices_callback_usb);
+    tcp_list();
 }
 
 void usage(void)
@@ -297,14 +318,15 @@ void usage(void)
             "  -p <product>                             specify product name\n"
             "  -c <cmdline>                             override kernel commandline\n"
             "  -i <vendor id>                           specify a custom USB vendor id\n"
-            "  -b <base_addr>                           specify a custom kernel base address\n"
+            "  -b <base_addr>                           specify a custom kernel base address. default: 0x10000000\n"
             "  -n <page size>                           specify the nand page size. default: 2048\n"
             "  -S <size>[K|M|G]                         automatically sparse files greater than\n"
             "                                           size.  0 to disable\n"
+            "  -t <host>                                connect to remote fastboot on host\n"
         );
 }
 
-void *load_bootable_image(unsigned page_size, const char *kernel, const char *ramdisk,
+void *load_bootable_image(const char *kernel, const char *ramdisk,
                           unsigned *sz, const char *cmdline)
 {
     void *kdata = 0, *rdata = 0;
@@ -345,7 +367,10 @@ void *load_bootable_image(unsigned page_size, const char *kernel, const char *ra
     }
 
     fprintf(stderr,"creating boot image...\n");
-    bdata = mkbootimg(kdata, ksize, rdata, rsize, 0, 0, page_size, base_addr, &bsize);
+    bdata = mkbootimg(kdata, ksize, kernel_offset,
+                      rdata, rsize, ramdisk_offset,
+                      0, 0, second_offset,
+                      page_size, base_addr, tags_offset, &bsize);
     if(bdata == 0) {
         fprintf(stderr,"failed to create boot.img\n");
         return 0;
@@ -522,11 +547,11 @@ struct sparse_file **load_sparse_files(const char *fname, int max_size)
     return out_s;
 }
 
-static int64_t get_target_sparse_limit(struct usb_handle *usb)
+static int64_t get_target_sparse_limit(transport_t *trans)
 {
     int64_t limit = 0;
     char response[FB_RESPONSE_SZ + 1];
-    int status = fb_getvar(usb, response, "max-download-size");
+    int status = fb_getvar(trans, response, "max-download-size");
 
     if (!status) {
         limit = strtoul(response, NULL, 0);
@@ -539,7 +564,7 @@ static int64_t get_target_sparse_limit(struct usb_handle *usb)
     return limit;
 }
 
-static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
+static int64_t get_sparse_limit(transport_t *trans, int64_t size)
 {
     int64_t limit;
 
@@ -549,7 +574,7 @@ static int64_t get_sparse_limit(struct usb_handle *usb, int64_t size)
         limit = sparse_limit;
     } else {
         if (target_sparse_limit == -1) {
-            target_sparse_limit = get_target_sparse_limit(usb);
+            target_sparse_limit = get_target_sparse_limit(trans);
         }
         if (target_sparse_limit > 0) {
             limit = target_sparse_limit;
@@ -574,17 +599,17 @@ static int needs_erase(const char *part)
     /* The function fb_format_supported() currently returns the value
      * we want, so just call it.
      */
-     return fb_format_supported(usb, part);
+     return fb_format_supported(&transport, part);
 }
 
-void do_flash(usb_handle *usb, const char *pname, const char *fname)
+void do_flash(transport_t *trans, const char *pname, const char *fname)
 {
     int64_t sz64;
     void *data;
     int64_t limit;
 
     sz64 = file_size(fname);
-    limit = get_sparse_limit(usb, sz64);
+    limit = get_sparse_limit(trans, sz64);
     if (limit) {
         struct sparse_file **s = load_sparse_files(fname, limit);
         if (s == NULL) {
@@ -806,53 +831,38 @@ int main(int argc, char **argv)
     int erase_first = 1;
     void *data;
     unsigned sz;
-    unsigned page_size = 2048;
     int status;
     int c;
     int r;
 
-    const struct option longopts = { 0, 0, 0, 0 };
+    const struct option longopts[] = {
+        {"base", required_argument, 0, 'b'},
+        {"kernel_offset", required_argument, 0, 'k'},
+        {"page_size", required_argument, 0, 'n'},
+        {"ramdisk_offset", required_argument, 0, 'r'},
+        {"help", 0, 0, 'h'},
+        {0, 0, 0, 0}
+    };
 
     serial = getenv("ANDROID_SERIAL");
 
     while (1) {
-        c = getopt_long(argc, argv, "wub:n:s:S:lp:c:i:m:h", &longopts, NULL);
+        int option_index = 0;
+        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:ht:", longopts, NULL);
         if (c < 0) {
             break;
         }
-
+        /* Alphabetical cases */
         switch (c) {
-        case 'w':
-            wants_wipe = 1;
-            break;
-        case 'u':
-            erase_first = 0;
-            break;
         case 'b':
             base_addr = strtoul(optarg, 0, 16);
-            break;
-        case 'n':
-            page_size = (unsigned)strtoul(optarg, NULL, 0);
-            if (!page_size) die("invalid page size");
-            break;
-        case 's':
-            serial = optarg;
-            break;
-        case 'S':
-            sparse_limit = parse_num(optarg);
-            if (sparse_limit < 0) {
-                    die("invalid sparse limit");
-            }
-            break;
-        case 'l':
-            long_listing = 1;
-            break;
-        case 'p':
-            product = optarg;
             break;
         case 'c':
             cmdline = optarg;
             break;
+        case 'h':
+            usage();
+            return 1;
         case 'i': {
                 char *endptr = NULL;
                 unsigned long val;
@@ -863,9 +873,40 @@ int main(int argc, char **argv)
                 vendor_id = (unsigned short)val;
                 break;
             }
-        case 'h':
-            usage();
-            return 1;
+        case 'k':
+            kernel_offset = strtoul(optarg, 0, 16);
+            break;
+        case 'l':
+            long_listing = 1;
+            break;
+        case 'n':
+            page_size = (unsigned)strtoul(optarg, NULL, 0);
+            if (!page_size) die("invalid page size");
+            break;
+        case 'p':
+            product = optarg;
+            break;
+        case 'r':
+            ramdisk_offset = strtoul(optarg, 0, 16);
+            break;
+        case 's':
+            serial = optarg;
+            break;
+        case 'S':
+            sparse_limit = parse_num(optarg);
+            if (sparse_limit < 0) {
+                    die("invalid sparse limit");
+            }
+            break;
+        case 'u':
+            erase_first = 0;
+            break;
+        case 'w':
+            wants_wipe = 1;
+            break;
+        case 't':
+            host = optarg;
+            break;
         case '?':
             return 1;
         default:
@@ -892,7 +933,17 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    usb = open_device();
+    if(host) {
+        transport.userdata = open_device_tcp();
+        transport.close = tcp_close;
+        transport.read = tcp_read;
+        transport.write = tcp_write;
+    } else {
+        transport.userdata = open_device();
+        transport.close = usb_close;
+        transport.read = usb_read;
+        transport.write = usb_write;
+    }
 
     while (argc > 0) {
         if(!strcmp(*argv, "getvar")) {
@@ -901,18 +952,10 @@ int main(int argc, char **argv)
             skip(2);
         } else if(!strcmp(*argv, "erase")) {
             require(2);
-
-            if (fb_format_supported(usb, argv[1])) {
-                fprintf(stderr, "******** Did you mean to fastboot format this partition?\n");
-            }
-
             fb_queue_erase(argv[1]);
             skip(2);
         } else if(!strcmp(*argv, "format")) {
             require(2);
-            if (erase_first && needs_erase(argv[1])) {
-                fb_queue_erase(argv[1]);
-            }
             fb_queue_format(argv[1], 0);
             skip(2);
         } else if(!strcmp(*argv, "signature")) {
@@ -944,7 +987,7 @@ int main(int argc, char **argv)
                 rname = argv[0];
                 skip(1);
             }
-            data = load_bootable_image(page_size, kname, rname, &sz, cmdline);
+            data = load_bootable_image(kname, rname, &sz, cmdline);
             if (data == 0) return 1;
             fb_queue_download("boot.img", data, sz);
             fb_queue_command("boot", "booting");
@@ -963,7 +1006,9 @@ int main(int argc, char **argv)
             if (erase_first && needs_erase(pname)) {
                 fb_queue_erase(pname);
             }
-            do_flash(usb, pname, fname);
+            data = load_file(fname, &sz);
+            if (data == 0) die("cannot load '%s': %s\n", fname, strerror(errno));
+            fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
             char *kname = argv[2];
@@ -975,7 +1020,7 @@ int main(int argc, char **argv)
             } else {
                 skip(3);
             }
-            data = load_bootable_image(page_size, kname, rname, &sz, cmdline);
+            data = load_bootable_image(kname, rname, &sz, cmdline);
             if (data == 0) die("cannot load bootable image");
             fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flashall")) {
@@ -1014,6 +1059,6 @@ int main(int argc, char **argv)
     if (fb_queue_is_empty())
         return 0;
 
-    status = fb_execute_queue(usb);
+    status = fb_execute_queue(&transport);
     return (status) ? 1 : 0;
 }

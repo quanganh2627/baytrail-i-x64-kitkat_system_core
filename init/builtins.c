@@ -34,11 +34,12 @@
 #include <cutils/partition_utils.h>
 #include <sys/system_properties.h>
 #include <fs_mgr.h>
+#include <fnmatch.h>
+#include <dirent.h>
+#include <cutils/probe_module.h>
 
-#ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
 #include <selinux/label.h>
-#endif
 
 #include "init.h"
 #include "keywords.h"
@@ -291,6 +292,40 @@ int do_insmod(int nargs, char **args)
     return do_insmod_inner(nargs, args, size);
 }
 
+static int do_probemod_inner(int nargs, char **args, int opt_len)
+{
+    char options[opt_len + 1];
+    int i;
+    int ret;
+
+    options[0] = '\0';
+    if (nargs > 2) {
+        strcpy(options, args[2]);
+        for (i = 3; i < nargs; ++i) {
+            strcat(options, " ");
+            strcat(options, args[i]);
+        }
+    }
+
+    ret = insmod_by_dep(args[1], options, NULL, 1, NULL, NULL);
+    if (ret)
+        ERROR("Couldn't probe module '%s'\n", args[1]);
+    return ret;
+}
+
+int do_probemod(int nargs, char **args)
+{
+    int i;
+    int size = 0;
+
+    if (nargs > 2) {
+        for (i = 2; i < nargs; ++i)
+            size += strlen(args[i]) + 1;
+    }
+
+    return do_probemod_inner(nargs, args, size);
+}
+
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;
@@ -466,6 +501,9 @@ int do_mount_all(int nargs, char **args)
     int child_ret = -1;
     int status;
     const char *prop;
+    struct fstab *fstab;
+    char prop_val[PROP_VALUE_MAX];
+
 
     if (nargs != 2) {
         return -1;
@@ -489,7 +527,14 @@ int do_mount_all(int nargs, char **args)
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
         klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        child_ret = fs_mgr_mount_all(args[1]);
+        ret = expand_props(prop_val, args[1], sizeof(prop_val));
+        if (ret) {
+            ERROR("cannot expand '%s' while assigning to '%s'\n", args[1], prop_val);
+            return -1;
+        }
+        fstab = fs_mgr_read_fstab(prop_val);
+        child_ret = fs_mgr_mount_all(fstab);
+        fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
             ERROR("fs_mgr_mount_all returned an error\n");
         }
@@ -515,24 +560,20 @@ int do_mount_all(int nargs, char **args)
 }
 
 int do_setcon(int nargs, char **args) {
-#ifdef HAVE_SELINUX
     if (is_selinux_enabled() <= 0)
         return 0;
     if (setcon(args[1]) < 0) {
         return -errno;
     }
-#endif
     return 0;
 }
 
 int do_setenforce(int nargs, char **args) {
-#ifdef HAVE_SELINUX
     if (is_selinux_enabled() <= 0)
         return 0;
     if (security_setenforce(atoi(args[1])) < 0) {
         return -errno;
     }
-#endif
     return 0;
 }
 
@@ -543,6 +584,16 @@ int do_setkey(int nargs, char **args)
     kbe.kb_index = strtoul(args[2], 0, 0);
     kbe.kb_value = strtoul(args[3], 0, 0);
     return setkey(&kbe);
+}
+
+int do_builtin_coldboot(int nargs, char **args)
+{
+    if (nargs != 2 || !args[1] || *args[1] == '\0')
+        return -1;
+
+    coldboot(args[1]);
+
+    return 0;
 }
 
 int do_setprop(int nargs, char **args)
@@ -650,6 +701,41 @@ int do_write(int nargs, char **args)
         return -EINVAL;
     }
     return write_file(path, prop_val);
+}
+
+int do_setprop_from_sysfs(int nargs, char **args)
+{
+    const char *path = args[1];
+    const char *prop_name = args[2];
+    char prop_val[PROP_VALUE_MAX];
+    int ret;
+    int fd;
+    unsigned sz;
+
+    if (strncmp(path, "/sys/", sizeof("/sys/") - 1)) {
+        ERROR("read from /sys only: '%s'\n", path);
+        return -EINVAL;
+    }
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        ERROR("cannot open '%s': '%s'\n", path, strerror(errno));
+        return fd;
+    }
+
+    sz = read(fd, prop_val, PROP_VALUE_MAX-1);
+    if (sz <= 0) {
+        ERROR("cannot read from '%s': '%s'\n", path, strerror(errno));
+        ret = sz;
+        goto oops;
+    }
+
+    prop_val[sz-1] = '\0';
+    ret = property_set(prop_name, prop_val);
+
+oops:
+    close(fd);
+    return ret;
 }
 
 int do_copy(int nargs, char **args)
@@ -760,36 +846,30 @@ int do_restorecon(int nargs, char **args) {
 }
 
 int do_setsebool(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    SELboolean *b = alloca(nargs * sizeof(SELboolean));
-    char *v;
-    int i;
+    const char *name = args[1];
+    const char *value = args[2];
+    SELboolean b;
+    int ret;
 
     if (is_selinux_enabled() <= 0)
         return 0;
 
-    for (i = 1; i < nargs; i++) {
-        char *name = args[i];
-        v = strchr(name, '=');
-        if (!v) {
-            ERROR("setsebool: argument %s had no =\n", name);
-            return -EINVAL;
-        }
-        *v++ = 0;
-        b[i-1].name = name;
-        if (!strcmp(v, "1") || !strcasecmp(v, "true") || !strcasecmp(v, "on"))
-            b[i-1].value = 1;
-        else if (!strcmp(v, "0") || !strcasecmp(v, "false") || !strcasecmp(v, "off"))
-            b[i-1].value = 0;
-        else {
-            ERROR("setsebool: invalid value %s\n", v);
-            return -EINVAL;
-        }
+    b.name = name;
+    if (!strcmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "on"))
+        b.value = 1;
+    else if (!strcmp(value, "0") || !strcasecmp(value, "false") || !strcasecmp(value, "off"))
+        b.value = 0;
+    else {
+        ERROR("setsebool: invalid value %s\n", value);
+        return -EINVAL;
     }
 
-    if (security_set_boolean_list(nargs - 1, b, 0) < 0)
-        return -errno;
-#endif
+    if (security_set_boolean_list(1, &b, 0) < 0) {
+        ret = -errno;
+        ERROR("setsebool: could not set %s to %s\n", name, value);
+        return ret;
+    }
+
     return 0;
 }
 

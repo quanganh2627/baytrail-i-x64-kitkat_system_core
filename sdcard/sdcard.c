@@ -28,6 +28,8 @@
 #include <limits.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include <private/android_filesystem_config.h>
 
@@ -826,8 +828,8 @@ static int handle_open(struct fuse* fuse, struct fuse_handler* handler,
         return -errno;
     }
     out.fh = ptr_to_id(h);
-    out.open_flags = 0;
-    out.padding = 0;
+    out.open_flags = FOPEN_FAST_PATH;
+    out.fh_backing = (uint32_t)h->fd;
     fuse_reply(fuse, hdr->unique, &out, sizeof(out));
     return NO_STATUS;
 }
@@ -1017,18 +1019,28 @@ static int handle_releasedir(struct fuse* fuse, struct fuse_handler* handler,
 static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
         const struct fuse_in_header* hdr, const struct fuse_init_in* req)
 {
-    struct fuse_init_out out;
+    struct fuse_init_out out_fastpath;
+    struct fuse_init_out_old *out = (struct fuse_init_out_old*)&out_fastpath;
 
     TRACE("[%d] INIT ver=%d.%d maxread=%d flags=%x\n",
             handler->token, req->major, req->minor, req->max_readahead, req->flags);
-    out.major = FUSE_KERNEL_VERSION;
-    out.minor = FUSE_KERNEL_MINOR_VERSION;
-    out.max_readahead = req->max_readahead;
-    out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
-    out.max_background = 32;
-    out.congestion_threshold = 32;
-    out.max_write = MAX_WRITE;
-    fuse_reply(fuse, hdr->unique, &out, sizeof(out));
+    out->major = FUSE_KERNEL_VERSION;
+    out->minor = FUSE_KERNEL_MINOR_VERSION;
+    out->max_readahead = req->max_readahead;
+    out->flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
+    out->max_background = 32;
+    out->congestion_threshold = 32;
+    out->max_write = MAX_WRITE;
+
+    if (req->flags & FUSE_FAST_PATH_ENABLE)
+    {
+        out_fastpath.pid = (uint64_t)getpid();
+        out_fastpath.flags |= FUSE_FAST_PATH_ENABLE;
+        fuse_reply(fuse, hdr->unique, &out_fastpath, sizeof(out_fastpath));
+    }
+    else
+        fuse_reply(fuse, hdr->unique, out, sizeof(out));
+
     return NO_STATUS;
 }
 
@@ -1305,6 +1317,7 @@ int main(int argc, char **argv)
     gid_t gid = 0;
     int num_threads = DEFAULT_NUM_THREADS;
     int i;
+    struct rlimit rlim;
 
     for (i = 1; i < argc; i++) {
         char* arg = argv[i];
@@ -1351,6 +1364,12 @@ int main(int argc, char **argv)
     if (num_threads < 1) {
         ERROR("number of threads must be at least 1\n");
         return usage();
+    }
+
+    rlim.rlim_cur = 8192;
+    rlim.rlim_max = 8192;
+    if (setrlimit(RLIMIT_NOFILE, &rlim)) {
+        ERROR("Error setting RLIMIT_NOFILE, errno = %d\n", errno);
     }
 
     res = run(source_path, dest_path, uid, gid, num_threads);

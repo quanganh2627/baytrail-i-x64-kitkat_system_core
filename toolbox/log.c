@@ -93,6 +93,7 @@ int log_main(int argc, char *argv[])
     const char *tag = "log";
     char buffer[4096];
     int i;
+    int remainingChar;
 
     priority = ANDROID_LOG_INFO;
 
@@ -128,10 +129,14 @@ int log_main(int argc, char *argv[])
     }
 
     buffer[0] = '\0';
-    
-    for (i = optind ; i < argc ; i++) {
-        strncat(buffer, argv[i], sizeof(buffer)-1);
-        strncat(buffer, " ", sizeof(buffer)-1);
+    remainingChar = sizeof(buffer) - 1;
+    for (i = optind ; i < argc && remainingChar; i++) {
+        strncat(buffer, argv[i], remainingChar);
+        remainingChar -= strlen(argv[i]);
+        if (remainingChar < 1) break;
+
+        strcat(buffer, " ");
+        remainingChar--;
     }
 
     if(buffer[0] == 0) {

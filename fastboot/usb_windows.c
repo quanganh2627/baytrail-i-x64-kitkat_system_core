@@ -73,10 +73,10 @@ int recognized_device(usb_handle* handle, ifc_match_func callback);
 usb_handle* do_usb_open(const wchar_t* interface_name);
 
 /// Writes data to the opened usb handle
-int usb_write(usb_handle* handle, const void* data, int len);
+int usb_write(void *userdata, const void* data, int len);
 
 /// Reads data using the opened usb handle
-int usb_read(usb_handle *handle, void* data, int len);
+int usb_read(void *userdata, void* data, int len);
 
 /// Cleans up opened usb handle
 void usb_cleanup_handle(usb_handle* handle);
@@ -85,7 +85,7 @@ void usb_cleanup_handle(usb_handle* handle);
 void usb_kick(usb_handle* handle);
 
 /// Closes opened usb handle
-int usb_close(usb_handle* handle);
+int usb_close(void* userdata);
 
 
 usb_handle* do_usb_open(const wchar_t* interface_name) {
@@ -151,8 +151,9 @@ usb_handle* do_usb_open(const wchar_t* interface_name) {
     return NULL;
 }
 
-int usb_write(usb_handle* handle, const void* data, int len) {
-    unsigned long time_out = 500 + len * 8;
+int usb_write(void* userdata, const void* data, int len) {
+    usb_handle *handle = (usb_handle *) userdata;
+    unsigned long time_out = 5000;
     unsigned long written = 0;
     unsigned count = 0;
     int ret;
@@ -193,8 +194,9 @@ int usb_write(usb_handle* handle, const void* data, int len) {
     return -1;
 }
 
-int usb_read(usb_handle *handle, void* data, int len) {
-    unsigned long time_out = 500 + len * 8;
+int usb_read(void* userdata, void* data, int len) {
+    usb_handle *handle = (usb_handle *) userdata;
+    unsigned long time_out = 0;
     unsigned long read = 0;
     int ret;
 
@@ -212,7 +214,7 @@ int usb_read(usb_handle *handle, void* data, int len) {
             DBG("usb_read got: %ld, expected: %d, errno: %d\n", read, xfer, errno);
             if (ret) {
                 return read;
-            } else if (errno != ERROR_SEM_TIMEOUT) {
+            } else {
                 // assume ERROR_INVALID_HANDLE indicates we are disconnected
                 if (errno == ERROR_INVALID_HANDLE)
                     usb_kick(handle);
@@ -257,7 +259,8 @@ void usb_kick(usb_handle* handle) {
     }
 }
 
-int usb_close(usb_handle* handle) {
+int usb_close(void* userdata) {
+    usb_handle *handle = (usb_handle *) userdata;
     DBG("usb_close\n");
 
     if (NULL != handle) {

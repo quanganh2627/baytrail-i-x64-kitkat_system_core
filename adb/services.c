@@ -125,9 +125,10 @@ void restart_root_service(int fd, void *cookie)
             return;
         }
 
-        property_set("service.adb.root", "1");
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
         writex(fd, buf, strlen(buf));
+        sleep(1);
+        property_set("service.adb.root", "1");
         adb_close(fd);
     }
 }
@@ -155,6 +156,15 @@ void restart_tcp_service(int fd, void *cookie)
 void restart_usb_service(int fd, void *cookie)
 {
     char buf[100];
+    char value[PROPERTY_VALUE_MAX];
+
+    property_get("service.adb.tcp.port", value, "0");
+    if (!strcmp(value, "0")) {
+        snprintf(buf, sizeof(buf), "already in USB mode\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+        return;
+    }
 
     property_set("service.adb.tcp.port", "0");
     snprintf(buf, sizeof(buf), "restarting in USB mode\n");
@@ -202,7 +212,7 @@ static void echo_service(int fd, void *cookie)
     int c;
 
     for(;;) {
-        r = read(fd, buf, 4096);
+        r = adb_read(fd, buf, 4096);
         if(r == 0) goto done;
         if(r < 0) {
             if(errno == EINTR) continue;
