@@ -25,4 +25,7 @@ void set_module_args(int nargs, char **args);
 void set_uevent_trigger(int nargs, char **args);
 int add_uevent_trigger(int nargs, char** args);
 
+void set_inet_args(int nargs, char **args);
+void set_dev_args(int nargs, char **args);
+
 #endif
