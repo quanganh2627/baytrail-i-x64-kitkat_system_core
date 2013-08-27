@@ -71,8 +71,5 @@ int ueventd_parse_config_file(const char *fn)
 
 static void parse_line_device(struct parse_state* state, int nargs, char **args)
 {
-    if (args && args[0] && !strncmp("mod:", args[0], 4))
-        set_module_args(nargs, args);
-    else if (args)
-        set_device_permission(nargs, args);
+    set_device_permission(nargs, args);
 }

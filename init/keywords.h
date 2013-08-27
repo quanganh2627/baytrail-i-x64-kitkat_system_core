@@ -1,6 +1,5 @@
 
 #ifndef KEYWORD
-int do_builtin_coldboot(int nargs, char **args);
 int do_chroot(int nargs, char **args);
 int do_chdir(int nargs, char **args);
 int do_class_start(int nargs, char **args);
@@ -15,7 +14,6 @@ int do_insmod(int nargs, char **args);
 int do_mkdir(int nargs, char **args);
 int do_mount_all(int nargs, char **args);
 int do_mount(int nargs, char **args);
-int do_probemod(int nargs, char **args);
 int do_restart(int nargs, char **args);
 int do_restorecon(int nargs, char **args);
 int do_rm(int nargs, char **args);
@@ -32,7 +30,6 @@ int do_trigger(int nargs, char **args);
 int do_symlink(int nargs, char **args);
 int do_sysclktz(int nargs, char **args);
 int do_write(int nargs, char **args);
-int do_setprop_from_sysfs(int nargs, char **args);
 int do_copy(int nargs, char **args);
 int do_chown(int nargs, char **args);
 int do_chmod(int nargs, char **args);
@@ -69,7 +66,6 @@ enum {
     KEYWORD(on,          SECTION, 0, 0)
     KEYWORD(oneshot,     OPTION,  0, 0)
     KEYWORD(onrestart,   OPTION,  0, 0)
-    KEYWORD(probemod,    COMMAND, 1, do_probemod)
     KEYWORD(restart,     COMMAND, 1, do_restart)
     KEYWORD(restorecon,  COMMAND, 1, do_restorecon)
     KEYWORD(rm,          COMMAND, 1, do_rm)
@@ -92,14 +88,12 @@ enum {
     KEYWORD(user,        OPTION,  0, 0)
     KEYWORD(wait,        COMMAND, 1, do_wait)
     KEYWORD(write,       COMMAND, 2, do_write)
-    KEYWORD(setprop_from_sysfs,       COMMAND, 2, do_setprop_from_sysfs)
     KEYWORD(copy,        COMMAND, 2, do_copy)
     KEYWORD(chown,       COMMAND, 2, do_chown)
     KEYWORD(chmod,       COMMAND, 2, do_chmod)
     KEYWORD(loglevel,    COMMAND, 1, do_loglevel)
     KEYWORD(load_persist_props,    COMMAND, 0, do_load_persist_props)
     KEYWORD(ioprio,      OPTION,  0, 0)
-    KEYWORD(coldboot,    COMMAND, 1, do_builtin_coldboot)
 #ifdef __MAKE_KEYWORD_ENUM__
     KEYWORD_COUNT,
 };

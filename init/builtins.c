@@ -34,9 +34,6 @@
 #include <cutils/partition_utils.h>
 #include <sys/system_properties.h>
 #include <fs_mgr.h>
-#include <fnmatch.h>
-#include <dirent.h>
-#include <cutils/probe_module.h>
 
 #ifdef HAVE_SELINUX
 #include <selinux/selinux.h>
@@ -294,40 +291,6 @@ int do_insmod(int nargs, char **args)
     return do_insmod_inner(nargs, args, size);
 }
 
-static int do_probemod_inner(int nargs, char **args, int opt_len)
-{
-    char options[opt_len + 1];
-    int i;
-    int ret;
-
-    options[0] = '\0';
-    if (nargs > 2) {
-        strcpy(options, args[2]);
-        for (i = 3; i < nargs; ++i) {
-            strcat(options, " ");
-            strcat(options, args[i]);
-        }
-    }
-
-    ret = insmod_by_dep(args[1], options, NULL, 1, NULL, NULL);
-    if (ret)
-        ERROR("Couldn't probe module '%s'\n", args[1]);
-    return ret;
-}
-
-int do_probemod(int nargs, char **args)
-{
-    int i;
-    int size = 0;
-
-    if (nargs > 2) {
-        for (i = 2; i < nargs; ++i)
-            size += strlen(args[i]) + 1;
-    }
-
-    return do_probemod_inner(nargs, args, size);
-}
-
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;
@@ -503,8 +466,6 @@ int do_mount_all(int nargs, char **args)
     int child_ret = -1;
     int status;
     const char *prop;
-    char prop_val[PROP_VALUE_MAX];
-
 
     if (nargs != 2) {
         return -1;
@@ -528,12 +489,7 @@ int do_mount_all(int nargs, char **args)
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
         klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        ret = expand_props(prop_val, args[1], sizeof(prop_val));
-        if (ret) {
-            ERROR("cannot expand '%s' while assigning to '%s'\n", args[1], prop_val);
-            return -1;
-        }
-        child_ret = fs_mgr_mount_all(prop_val);
+        child_ret = fs_mgr_mount_all(args[1]);
         if (child_ret == -1) {
             ERROR("fs_mgr_mount_all returned an error\n");
         }
@@ -587,16 +543,6 @@ int do_setkey(int nargs, char **args)
     kbe.kb_index = strtoul(args[2], 0, 0);
     kbe.kb_value = strtoul(args[3], 0, 0);
     return setkey(&kbe);
-}
-
-int do_builtin_coldboot(int nargs, char **args)
-{
-    if (nargs != 2 || !args[1] || *args[1] == '\0')
-        return -1;
-
-    coldboot(args[1]);
-
-    return 0;
 }
 
 int do_setprop(int nargs, char **args)
@@ -704,41 +650,6 @@ int do_write(int nargs, char **args)
         return -EINVAL;
     }
     return write_file(path, prop_val);
-}
-
-int do_setprop_from_sysfs(int nargs, char **args)
-{
-    const char *path = args[1];
-    const char *prop_name = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
-    int fd;
-    unsigned sz;
-
-    if (strncmp(path, "/sys/", sizeof("/sys/") - 1)) {
-        ERROR("read from /sys only: '%s'\n", path);
-        return -EINVAL;
-    }
-
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        ERROR("cannot open '%s': '%s'\n", path, strerror(errno));
-        return fd;
-    }
-
-    sz = read(fd, prop_val, PROP_VALUE_MAX-1);
-    if (sz <= 0) {
-        ERROR("cannot read from '%s': '%s'\n", path, strerror(errno));
-        ret = sz;
-        goto oops;
-    }
-
-    prop_val[sz-1] = '\0';
-    ret = property_set(prop_name, prop_val);
-
-oops:
-    close(fd);
-    return ret;
 }
 
 int do_copy(int nargs, char **args)

@@ -23,11 +23,6 @@ LOCAL_SRC_FILES += bootchart.c
 LOCAL_CFLAGS    += -DBOOTCHART=1
 endif
 
-ifeq ($(BIGCORE_USB_INSTALLER), true)
-    LOCAL_CFLAGS += -DBIGCORE_USB_INSTALLER
-endif
-
-
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_LOCAL_PROP_OVERRIDE=1
 endif
@@ -66,14 +61,3 @@ ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINKS)
 # local module name
 ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
     $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(SYMLINKS)
-
-# make a link of modprobe to init
-SYMLINK_MODPROBE := $(TARGET_ROOT_OUT)/sbin/modprobe
-$(SYMLINK_MODPROBE): MODPROBE_BINARY := $(LOCAL_MODULE)
-$(SYMLINK_MODPROBE): $(LOCAL_INSTALLED_MODULE) $(LOCAL_PATH)/Android.mk
-	@echo "Symlink: $@ -> ../$(MODPROBE_BINARY)"
-	@mkdir -p $(dir $@)
-	@rm -rf $@
-	$(hide) ln -sf ../$(MODPROBE_BINARY) $@
-
-ALL_DEFAULT_INSTALLED_MODULES += $(SYMLINK_MODPROBE)

@@ -94,6 +94,11 @@ struct tzhead {
 ** such instants).
 */
 
+/*
+** In the current implementation, "tzset()" refuses to deal with files that
+** exceed any of the limits below.
+*/
+
 #ifndef TZ_MAX_TIMES
 #define TZ_MAX_TIMES	1200
 #endif /* !defined TZ_MAX_TIMES */

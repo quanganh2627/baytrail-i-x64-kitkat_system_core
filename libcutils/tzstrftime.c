@@ -48,7 +48,11 @@ static char *	_fmt P((const char *, const struct tm *, char *, const char *,
 static char *	_yconv P((int, int, int, int, char *, const char *, int));
 static char *	getformat P((int, char *, char *, char *, char *));
 
-extern char *	tztime_tzname[];
+extern char *	tzname[];
+
+
+
+
 
 /* from private.h */
 
@@ -528,7 +532,7 @@ label:
 				else
 #endif /* defined TM_ZONE */
 				if (t->tm_isdst >= 0)
-					pt = _add(tztime_tzname[t->tm_isdst != 0],
+					pt = _add(tzname[t->tm_isdst != 0],
 						pt, ptlim, modifier);
 				/*
 				** C99 says that %Z must be replaced by the

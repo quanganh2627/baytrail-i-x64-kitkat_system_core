@@ -81,18 +81,22 @@ static const time_t TIME_T_MIN =
 #ifndef WILDABBR
 /*
 ** Someone might make incorrect use of a time zone abbreviation:
-**	1.	They might reference tztime_tzname[1] after setting to a time zone
+**	1.	They might reference tzname[0] before calling tzset (explicitly
+**		or implicitly).
+**	2.	They might reference tzname[1] before calling tzset (explicitly
+**		or implicitly).
+**	3.	They might reference tzname[1] after setting to a time zone
 **		in which Daylight Saving Time is never observed.
-**	2.	They might reference tztime_tzname[0] after setting to a time zone
+**	4.	They might reference tzname[0] after setting to a time zone
 **		in which Standard Time is never observed.
-**	3.	They might reference tm.TM_ZONE after calling offtime.
+**	5.	They might reference tm.TM_ZONE after calling offtime.
 ** What's best to do in the above cases is open to debate;
 ** for now, we just set things up so that in any of the five cases
-** WILDABBR is used. Another possibility: initialize tztime_tzname[0] to the
+** WILDABBR is used. Another possibility: initialize tzname[0] to the
 ** string "tzname[0] used before set", and similarly for the other cases.
-** And another: initialize tztime_tzname[0] to "ERA", with an explanation in the
+** And another: initialize tzname[0] to "ERA", with an explanation in the
 ** manual page of what this "time zone abbreviation" means (doing this so
-** that tztime_tzname[0] has the "normal" length of three characters).
+** that tzname[0] has the "normal" length of three characters).
 */
 #define WILDABBR	"   "
 #endif /* !defined WILDABBR */
@@ -238,7 +242,7 @@ static char		lcl_TZname[TZ_STRLEN_MAX + 1];
 static int		lcl_is_set;
 static int		gmt_is_set;
 
-char *			tztime_tzname[2] = {
+char *			tzname[2] = {
 	wildabbr,
 	wildabbr
 };
@@ -296,7 +300,7 @@ const time_t	t0;
 	if (TYPE_INTEGRAL(time_t) &&
 		TYPE_BIT(time_t) - TYPE_SIGNED(time_t) < SECSPERREPEAT_BITS)
 			return 0;
-	return (int_fast64_t)(t1 - t0) == SECSPERREPEAT;
+	return t1 - t0 == SECSPERREPEAT;
 }
 
 static int toint(unsigned char *s) {
@@ -1260,13 +1264,24 @@ const struct state *		sp;
 #ifdef HAVE_TM_GMTOFF
 	tmp->tm_gmtoff = ttisp->tt_gmtoff;
 #endif
-	tztime_tzname[tmp->tm_isdst] = (char *)&sp->chars[ttisp->tt_abbrind];
+	tzname[tmp->tm_isdst] = &sp->chars[ttisp->tt_abbrind];
 #ifdef TM_ZONE
 	tmp->TM_ZONE = &sp->chars[ttisp->tt_abbrind];
 #endif /* defined TM_ZONE */
 	return result;
 }
 
+
+// ============================================================================
+#if 0
+struct tm *
+localtime(timep)
+const time_t * const	timep;
+{
+	tzset();
+	return localsub(timep, 0L, &tm);
+}
+#endif
 
 /*
 ** Re-entrant version of localtime.

@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/arm/texturing.cpp
+/* libs/pixelflinger/codeflinger/texturing.cpp
 **
 ** Copyright 2006, The Android Open Source Project
 **
@@ -23,7 +23,7 @@
 
 #include <cutils/log.h>
 
-#include "codeflinger/arm/GGLAssembler.h"
+#include "codeflinger/GGLAssembler.h"
 
 #ifdef __ARM_ARCH__
 #include <machine/cpu-features.h>

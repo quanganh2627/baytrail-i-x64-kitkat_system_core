@@ -15,7 +15,6 @@
  */
 
 #include <errno.h>
-#include <fnmatch.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,23 +42,16 @@
 #include <sys/wait.h>
 
 #include <cutils/list.h>
-#include <cutils/probe_module.h>
 #include <cutils/uevent.h>
-#include <cutils/module_parsers.h>
 
 #include "devices.h"
 #include "util.h"
 #include "log.h"
-#include "parser.h"
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
-#define CRDA_BIN_PATH   "/system/bin/crda"
-#define PLATFORM_STR    "platform"
-#define CHANGE_STR      "change"
-#define MODULES_BLKLST  "/ueventd.modules.blacklist"
 
 #ifdef HAVE_SELINUX
 extern struct selabel_handle *sehandle;
@@ -67,10 +59,16 @@ extern struct selabel_handle *sehandle;
 
 static int device_fd = -1;
 
-
-struct mod_args_ {
-    char *name;
-    char *args;
+struct uevent {
+    const char *action;
+    const char *path;
+    const char *subsystem;
+    const char *firmware;
+    const char *partition_name;
+    const char *device_name;
+    int partition_num;
+    int major;
+    int minor;
 };
 
 struct perms_ {
@@ -79,12 +77,7 @@ struct perms_ {
     mode_t perm;
     unsigned int uid;
     unsigned int gid;
-    unsigned short wildcard;
-};
-
-struct mod_arg_node {
-    struct mod_args_ mod_args;
-    struct listnode plist;
+    unsigned short prefix;
 };
 
 struct perm_node {
@@ -98,14 +91,13 @@ struct platform_node {
     struct listnode list;
 };
 
-static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short wildcard) {
+                  unsigned short prefix) {
     struct perm_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
@@ -123,41 +115,12 @@ int add_dev_perms(const char *name, const char *attr,
     node->dp.perm = perm;
     node->dp.uid = uid;
     node->dp.gid = gid;
-    node->dp.wildcard = wildcard;
+    node->dp.prefix = prefix;
 
     if (attr)
         list_add_tail(&sys_perms, &node->plist);
     else
         list_add_tail(&dev_perms, &node->plist);
-
-    return 0;
-}
-
-int add_mod_args(int nargs, const char *mod_name, char *args[])
-{
-    struct mod_arg_node *node = calloc(1, sizeof(*node));
-    char tmp_mod_args[1024];
-    int i = 0;
-
-    if (!node)
-        return -ENOMEM;
-
-    node->mod_args.name = strdup(mod_name);
-    if (!node->mod_args.name)
-        return -ENOMEM;
-
-    tmp_mod_args[0] = 0;
-    for ( i = 1; i < nargs; ++i) {
-        strlcat(tmp_mod_args, args[i], sizeof(tmp_mod_args));
-        strlcat(tmp_mod_args, " ", sizeof(tmp_mod_args));
-    }
-
-    node->mod_args.args = strdup(tmp_mod_args);
-
-    if (!node->mod_args.args)
-            return -ENOMEM;
-
-    list_add_tail(&lmod_args, &node->plist);
 
     return 0;
 }
@@ -173,8 +136,8 @@ void fixup_sys_perms(const char *upath)
          */
     list_for_each(node, &sys_perms) {
         dp = &(node_to_item(node, struct perm_node, plist))->dp;
-        if (dp->wildcard) {
-            if (fnmatch(dp->name + 4, upath, 0) != 0)
+        if (dp->prefix) {
+            if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
                 continue;
         } else {
             if (strcmp(upath, dp->name + 4))
@@ -205,8 +168,8 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
         perm_node = node_to_item(node, struct perm_node, plist);
         dp = &perm_node->dp;
 
-        if (dp->wildcard) {
-            if (fnmatch(dp->name, path, 0) != 0)
+        if (dp->prefix) {
+            if (strncmp(path, dp->name, strlen(dp->name)))
                 continue;
         } else {
             if (strcmp(path, dp->name))
@@ -220,33 +183,6 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
     *uid = 0;
     *gid = 0;
     return 0600;
-}
-
-const char *get_mod_args(const char *mod_name)
-{
-    struct listnode *node = NULL;
-    struct mod_arg_node *mod_arg_node = NULL;
-    struct mod_args_ *mod_args = NULL;
-    int n1, n2;
-
-    list_for_each(node, &lmod_args) {
-        mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
-        mod_args = &mod_arg_node->mod_args;
-        n1 = strlen(mod_args->name);
-        if (strncmp(mod_name, mod_args->name, n1))
-            continue;
-        n2 = strlen(mod_name);
-
-        if (n1 == n2)
-            return mod_args->args;
-
-        /* mod_name contains .ko at the end */
-        if (n1 + 3 == n2) {
-            if (!strncmp(&mod_name[n1], ".ko", 3))
-                return mod_args->args;
-        }
-    }
-    return "";
 }
 
 static void make_device(const char *path,
@@ -372,13 +308,11 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->path = "";
     uevent->subsystem = "";
     uevent->firmware = "";
-    uevent->country = "";
     uevent->major = -1;
     uevent->minor = -1;
     uevent->partition_name = NULL;
     uevent->partition_num = -1;
     uevent->device_name = NULL;
-    uevent->modalias = NULL;
 
         /* currently ignoring SEQNUM */
     while(*msg) {
@@ -409,12 +343,6 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
-        } else if (!strncmp(msg, "COUNTRY=", 8)) {
-            msg += 8;
-            uevent->country = msg;
-        } else if (!strncmp(msg, "MODALIAS=", 9)) {
-            msg += 9;
-            uevent->modalias = msg;
         }
 
         /* advance to after the next \0 */
@@ -422,10 +350,9 @@ static void parse_event(const char *msg, struct uevent *uevent)
             ;
     }
 
-    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d, '%s' }\n",
+    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d }\n",
                     uevent->action, uevent->path, uevent->subsystem,
-                    uevent->firmware, uevent->major, uevent->minor,
-                    uevent->country);
+                    uevent->firmware, uevent->major, uevent->minor);
 }
 
 static char **get_character_device_symlinks(struct uevent *uevent)
@@ -710,40 +637,8 @@ static void handle_generic_device_event(struct uevent *uevent)
              uevent->major, uevent->minor, links);
 }
 
-int module_probe(const char *modalias)
-{
-    return insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
-}
-
-static void handle_module_loading(const char *modalias)
-{
-    char *tmp;
-    struct module_alias_node *node;
-    int ret;
-    char **dep;
-    char *args;
-
-    if (!modalias) return;
-
-    ret = get_module_dep(modalias, NULL, 1, MODULES_BLKLST, &dep);
-
-    if (ret)
-        return;
-
-    args = get_mod_args(dep[0]);
-    INFO("Loading module %s, args %s\n", dep[0], args);
-    insmod_s(dep, args, 1, NULL);
-    free_dep_list(dep);
-}
-
 static void handle_device_event(struct uevent *uevent)
 {
-    if (!strcmp(uevent->action,"add")) {
-        if (uevent->modalias) {
-                handle_module_loading(uevent->modalias);
-        }
-    }
-
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
         fixup_sys_perms(uevent->path);
 
@@ -891,63 +786,7 @@ root_free_out:
     free(root);
 }
 
-
-static int handle_crda_event(struct uevent *uevent)
-{
-    int status;
-    int ret;
-    pid_t pid;
-    char country_env[11];
-    char *argv[] = { CRDA_BIN_PATH, NULL };
-    char *envp[] = { country_env  , NULL };
-
-    if(strncmp(uevent->subsystem, PLATFORM_STR, strlen(PLATFORM_STR)))
-       return (-1);
-
-    if(strncmp(uevent->action, CHANGE_STR, strlen(CHANGE_STR)))
-       return (-1);
-
-    INFO("executing CRDA country=%s\n", uevent->country);
-    snprintf(country_env, sizeof(country_env), "COUNTRY=%s", uevent->country);
-
-    if (access(argv[0], X_OK)) {
-        INFO("crda_event not handled - no crda executable\n");
-        return -1;
-    }
-
-    switch(pid = fork()) {
-    case -1:
-         /* Error occured */
-         ERROR("handle_crda_event - fork error\n");
-         return (-1);
-         break;
-    case  0:
-         /* Child related processing */
-         if (execve(argv[0], argv, envp) ==  -1) {
-              ERROR("handle_crda_event - execve error: %s %s\n", argv[0], envp[0]);
-              exit(EXIT_FAILURE);
-         }
-         break;
-    default:
-         /* Parent related processing */
-         /*
-          * man waitpid: POSIX.1-2001 specifies that if the disposition
-          * of SIGCHLD is set to SIG_IGN, then children that terminate
-          * do not become zombies and a call to waitpid() will block
-          * until all children have terminated, and then fail with errno
-          * set to ECHILD.
-          * With ICS, google has introduced this behavior in "ueventd.c"
-          *          signal(SIGCHLD, SIG_IGN);
-          * So handling of waitpid() return is no more needed.
-          */
-          waitpid (pid, &status,0);
-          break;
-    }
-
-    return 0;
-}
-
-void handle_firmware_event(struct uevent *uevent)
+static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
     int ret;
@@ -958,17 +797,16 @@ void handle_firmware_event(struct uevent *uevent)
     if(strcmp(uevent->action, "add"))
         return;
 
-    process_firmware_event(uevent);
-}
-
-void handle_device_crda_event(struct uevent *uevent)
-{
-    handle_device_event(uevent);
-    handle_crda_event(uevent);
+    /* we fork, to avoid making large memory allocations in init proper */
+    pid = fork();
+    if (!pid) {
+        process_firmware_event(uevent);
+        exit(EXIT_SUCCESS);
+    }
 }
 
 #define UEVENT_MSG_LEN  1024
-void handle_events_fd(void (*handle_event_fp)(struct uevent*))
+void handle_device_fd()
 {
     char msg[UEVENT_MSG_LEN+2];
     int n;
@@ -982,7 +820,8 @@ void handle_events_fd(void (*handle_event_fp)(struct uevent*))
         struct uevent uevent;
         parse_event(msg, &uevent);
 
-        handle_event_fp(&uevent);
+        handle_device_event(&uevent);
+        handle_firmware_event(&uevent);
     }
 }
 
@@ -992,7 +831,7 @@ void handle_events_fd(void (*handle_event_fp)(struct uevent*))
 **
 ** We drain any pending events from the netlink socket every time
 ** we poke another uevent file to make sure we don't overrun the
-** socket's buffer.
+** socket's buffer.  
 */
 
 static void do_coldboot(DIR *d)
@@ -1006,7 +845,7 @@ static void do_coldboot(DIR *d)
     if(fd >= 0) {
         write(fd, "add\n", 4);
         close(fd);
-        handle_events_fd(handle_device_event);
+        handle_device_fd();
     }
 
     while((de = readdir(d))) {
@@ -1029,7 +868,7 @@ static void do_coldboot(DIR *d)
     }
 }
 
-void coldboot(const char *path)
+static void coldboot(const char *path)
 {
     DIR *d = opendir(path);
     if(d) {
@@ -1069,17 +908,6 @@ void device_init(void)
     } else {
         log_event_print("skipping coldboot, already done\n");
     }
-}
-
-void uevent_fd_init(void)
-{
-   /* is 1MB enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(1024*1024, true);
-    if(device_fd < 0)
-        return;
-
-    fcntl(device_fd, F_SETFD, FD_CLOEXEC);
-    fcntl(device_fd, F_SETFL, O_NONBLOCK);
 }
 
 int get_device_fd()

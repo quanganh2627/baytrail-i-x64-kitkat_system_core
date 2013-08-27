@@ -22,7 +22,6 @@
 #include <string.h>
 #include <stddef.h>
 #include <ctype.h>
-#include <fnmatch.h>
 
 #include "init.h"
 #include "parser.h"
@@ -92,7 +91,6 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "onsole")) return K_console;
         if (!strcmp(s, "hown")) return K_chown;
         if (!strcmp(s, "hmod")) return K_chmod;
-        if (!strcmp(s, "oldboot")) return K_coldboot;
         if (!strcmp(s, "ritical")) return K_critical;
         break;
     case 'd':
@@ -132,9 +130,6 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "neshot")) return K_oneshot;
         if (!strcmp(s, "nrestart")) return K_onrestart;
         break;
-    case 'p':
-        if (!strcmp(s, "robemod")) return K_probemod;
-        break;
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
         if (!strcmp(s, "estorecon")) return K_restorecon;
@@ -149,7 +144,6 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
-        if (!strcmp(s, "etprop_from_sysfs")) return K_setprop_from_sysfs;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
         if (!strcmp(s, "etsebool")) return K_setsebool;
         if (!strcmp(s, "ocket")) return K_socket;
@@ -536,32 +530,6 @@ void queue_property_triggers(const char *name, const char *value)
     }
 }
 
-void action_for_each_property_trigger(const char *name, const char *value,
-                                      void (*func)(struct action *act))
-{
-    struct listnode *node;
-    struct action *act;
-
-    if (strncmp(name, "ro.", 3)!=0) return ;
-
-    list_for_each(node, &action_list) {
-        act = node_to_item(node, struct action, alist);
-        if (!strncmp(act->name, "property:", strlen("property:"))) {
-            const char *test = act->name + strlen("property:");
-            int name_length = strlen(name);
-
-            if (!strncmp(name, test, name_length) &&
-                    test[name_length] == '=' &&
-                    !fnmatch(test + name_length + 1, value, 0)) {
-                func(act);
-            }
-        }
-    }
-}
-void clear_action_list() {
-    list_init(&action_list);
-}
-
 void queue_all_property_triggers()
 {
     struct listnode *node;
@@ -603,7 +571,6 @@ void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
     act = calloc(1, sizeof(*act));
     act->name = name;
     list_init(&act->commands);
-    list_init(&act->qlist);
 
     cmd = calloc(1, sizeof(*cmd));
     cmd->func = func;
@@ -616,11 +583,7 @@ void queue_builtin_action(int (*func)(int nargs, char **args), char *name)
 
 void action_add_queue_tail(struct action *act)
 {
-    if (list_empty(&act->qlist))
-        list_add_tail(&action_queue, &act->qlist);
-    else
-        ERROR("action already in aciton_queue: action %p (%s)\n",
-            act, act->name);
+    list_add_tail(&action_queue, &act->qlist);
 }
 
 struct action *action_remove_queue_head(void)
@@ -631,7 +594,6 @@ struct action *action_remove_queue_head(void)
         struct listnode *node = list_head(&action_queue);
         struct action *act = node_to_item(node, struct action, qlist);
         list_remove(node);
-        list_init(node);
         return act;
     }
 }
@@ -865,7 +827,6 @@ static void *parse_action(struct parse_state *state, int nargs, char **args)
     act = calloc(1, sizeof(*act));
     act->name = args[1];
     list_init(&act->commands);
-    list_init(&act->qlist);
     list_add_tail(&action_list, &act->alist);
         /* XXX add to hash */
     return act;

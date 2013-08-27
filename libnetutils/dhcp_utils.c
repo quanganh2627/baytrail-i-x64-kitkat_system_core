@@ -111,7 +111,7 @@ static int fill_ip_info(const char *interface,
     property_get(prop_name, server, NULL);
 
     //TODO: Handle IPv6 when we change system property usage
-    if (strlen(gateway) == 0 || strcmp(gateway, "0.0.0.0") == 0) {
+    if (strcmp(gateway, "0.0.0.0") == 0) {
         //DHCP server is our best bet as gateway
         strncpy(gateway, server, PROPERTY_VALUE_MAX);
     }
@@ -137,9 +137,6 @@ static int fill_ip_info(const char *interface,
             mask = mask << 1;
         }
         *prefixLength = p;
-    } else {
-        snprintf(errmsg, sizeof(errmsg), "Could not get the value of property:  %s", prop_name);
-        return -1;
     }
     snprintf(prop_name, sizeof(prop_name), "%s.%s.dns1", DHCP_PROP_NAME_PREFIX, p2p_interface);
     property_get(prop_name, dns1, NULL);
