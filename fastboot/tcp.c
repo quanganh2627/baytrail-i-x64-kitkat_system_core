@@ -133,6 +133,10 @@ tcp_handle *tcp_open(const char *host)
     }
 
     tcp = calloc(1, sizeof(tcp_handle));
+    if (tcp == NULL) {
+        fprintf(stderr,"ERROR: Unable to allocate memory: %s\n",strerror(errno));
+        exit(1);
+    }
     tcp->sockfd = sockfd;
     return tcp;
 }
