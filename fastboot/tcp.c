@@ -132,7 +132,7 @@ void init_os(void) {
 }
 #endif
 
-static int tcp_open_sock(char *host, struct sockaddr_in *serv_addr)
+static int tcp_open_sock(const char *host, struct sockaddr_in *serv_addr)
 {
     int sockfd;
     struct hostent *server;
@@ -158,30 +158,58 @@ static int tcp_open_sock(char *host, struct sockaddr_in *serv_addr)
     return sockfd;
 }
 
+
+int set_nonblock(int sockfd)
+{
+#ifndef _WIN32
+    return fcntl(sockfd, F_SETFL, O_NONBLOCK);
+#else
+    u_long NonBlock = 1;
+
+    if (ioctlsocket(sockfd, FIONBIO, &NonBlock) == SOCKET_ERROR) {
+        printf("ERROR cannot get non blocking socket\n");
+        return -1;
+   }
+   return 0;
+#endif
+}
+
 /*
  * try to open a connection to 192.168.42.1:1234
  * in less than 100ms
  */
-void tcp_list(void)
+void tcp_list(const char *host)
 {
-#ifndef _WIN32
     int sockfd;
     struct sockaddr_in serv_addr;
     int ret;
     fd_set wfds;
     struct timeval tv;
 
-    sockfd = tcp_open_sock(FSTBOOT_DFL_ADDR, &serv_addr);
+    if (!host)
+        host = FSTBOOT_DFL_ADDR;
+
+#ifdef _WIN32
+    init_os();
+#endif
+
+    sockfd = tcp_open_sock(host, &serv_addr);
     if (sockfd < 0)
         return;
 
-    if (fcntl(sockfd, F_SETFL, O_NONBLOCK) < 0)
+    if (set_nonblock(sockfd) < 0)
         return;
 
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
+
+    /* Wait only if error was EINPROGRESS (WSAEWOULDBLOCK on WIN32) */
+#ifndef _WIN32
         if (errno != EINPROGRESS)
             return;
-
+#else
+        if (WSAGetLastError() != WSAEWOULDBLOCK)
+            return;
+#endif
         FD_ZERO(&wfds);
         FD_SET(sockfd, &wfds);
 
@@ -194,81 +222,13 @@ void tcp_list(void)
             return;
         if (!FD_ISSET(sockfd, &wfds))
             return;
+#ifndef _WIN32
         if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
             return;
-    }
-    list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
-    close(sockfd);
-#else
-    SOCKET s;
-    SOCKADDR_IN target;
-    WSADATA wsaData;
-    int iError;
-    u_long NonBlock=1;
-
-    // Initialize Winsock
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        return;
-    }
-
-   //Create a socket
-    if((s = socket(AF_INET , SOCK_STREAM , 0 )) == INVALID_SOCKET) {
-        WSACleanup();
-        return;
-    }
-
-    /* Non blocking socket */
-    NonBlock = 1;
-    if (ioctlsocket(s, FIONBIO, &NonBlock) == SOCKET_ERROR) {
-        goto clear_env;
-    }
-
-    target.sin_addr.s_addr = inet_addr(FSTBOOT_DFL_ADDR);
-    target.sin_family = AF_INET;
-    target.sin_port = htons( FSTBOOT_PORT );
-    //Connect to remote server
-    if(connect(s , (struct sockaddr *)&target , sizeof(target)) == SOCKET_ERROR) {
-        iError = WSAGetLastError();
-        //check if error was WSAEWOULDBLOCK, where we'll wait
-        if(iError == WSAEWOULDBLOCK) {
-            fd_set Write, Err;
-            TIMEVAL Timeout;
-
-            FD_ZERO(&Write);
-            FD_ZERO(&Err);
-            FD_SET(s, &Write);
-            FD_SET(s, &Err);
-            Timeout.tv_sec = 0;
-            Timeout.tv_usec = 100000;
-            iError = select(0,           //ignored
-                            NULL,        //read
-                            &Write,      //Write Check
-                            &Err,        //Error Check
-                            &Timeout);
-            if(iError == 0) {
-                goto clear_env;
-            } else {
-                if(FD_ISSET(s, &Write)) {
-                    list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
-                    goto clear_env;
-                 }
-                if(FD_ISSET(s, &Err)) {
-                    goto clear_env;
-                }
-            }
-        } else {
-            goto clear_env;
-        }
-    } else {
-        //connected without waiting (will never execute)
-        list_devices_callback(FSTBOOT_DFL_ADDR, NULL);
-        goto clear_env;
-    }
-clear_env:
-    closesocket(s);
-    WSACleanup();
-
 #endif
+    }
+    list_devices_callback(host, NULL);
+    close(sockfd);
 }
 
 tcp_handle *tcp_open(const char *host)
@@ -281,7 +241,7 @@ tcp_handle *tcp_open(const char *host)
     init_os();
 #endif
 
-    sockfd = tcp_open_sock(FSTBOOT_DFL_ADDR, &serv_addr);
+    sockfd = tcp_open_sock(host, &serv_addr);
     if (connect(sockfd,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0) {
         fprintf(stderr, "ERROR: Unable to connect to %s: %s\n",
                 host, strerror(errno));
