@@ -237,6 +237,12 @@ static void find_usb_device(const char *base,
                             // looks like ADB...
                         ep1 = (struct usb_endpoint_descriptor *)bufptr;
                         bufptr += USB_DT_ENDPOINT_SIZE;
+
+                        /* USB3.0 endpoint companion descriptor */
+                        if (bufptr[0] == USB_DT_SS_EP_COMP_SIZE &&
+                            bufptr[1] == USB_DT_SS_ENDPOINT_COMP)
+                            bufptr += USB_DT_SS_EP_COMP_SIZE;
+
                         ep2 = (struct usb_endpoint_descriptor *)bufptr;
                         bufptr += USB_DT_ENDPOINT_SIZE;
 

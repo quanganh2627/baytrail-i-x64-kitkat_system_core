@@ -118,6 +118,10 @@ LOCAL_SRC_FILES := \
 LOCAL_CFLAGS := -O2 -g -DADB_HOST=0 -Wall -Wno-unused-parameter -Werror
 LOCAL_CFLAGS += -D_XOPEN_SOURCE -D_GNU_SOURCE
 
+ifeq ($(INTEL_USB_SUPERSPEED_ADB),true)
+   LOCAL_CFLAGS += -DINTEL_USB_SUPERSPEED_ADB
+endif
+
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 LOCAL_CFLAGS += -DALLOW_ADBD_ROOT=1
 endif
@@ -162,6 +166,10 @@ LOCAL_CFLAGS := \
 	-Wall -Wno-unused-parameter -Werror \
 	-D_XOPEN_SOURCE \
 	-D_GNU_SOURCE
+
+ifeq ($(INTEL_USB_SUPERSPEED_ADB),true)
+   LOCAL_CFLAGS += -DINTEL_USB_SUPERSPEED_ADB
+endif
 
 LOCAL_C_INCLUDES += external/openssl/include
 
