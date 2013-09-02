@@ -37,6 +37,6 @@ tcp_handle *tcp_open(const char *host);
 int tcp_close(void *userdata);
 int tcp_read(void *userdata, void *_data, int len);
 int tcp_write(void *userdata, const void *_data, int len);
-void tcp_list(void);
+void tcp_list(const char *host);
 
 #endif
