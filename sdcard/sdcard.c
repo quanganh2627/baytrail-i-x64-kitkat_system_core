@@ -1039,7 +1039,7 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
         fuse_reply(fuse, hdr->unique, &out_fastpath, sizeof(out_fastpath));
     }
     else
-        fuse_reply(fuse, hdr->unique, out, sizeof(out));
+        fuse_reply(fuse, hdr->unique, out, sizeof(*out));
 
     return NO_STATUS;
 }
