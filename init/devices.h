@@ -40,6 +40,7 @@ struct uevent {
 extern void handle_events_fd(void (*handle_event_fp)(struct uevent*));
 extern void handle_device_crda_event(struct uevent *uevent);
 extern void handle_firmware_event(struct uevent*);
+extern void handle_modalias_triggers(const char* modalias);
 extern void device_init(void);
 extern void uevent_fd_init(void);
 extern int module_probe(const char *alias);

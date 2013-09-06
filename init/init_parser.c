@@ -58,12 +58,13 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 
 #include "keywords.h"
 
-#define KEYWORD(symbol, flags, nargs, func) \
-    [ K_##symbol ] = { #symbol, func, nargs + 1, flags, },
+#define KEYWORD(symbol, flags, nargs, func, uev_func) \
+    [ K_##symbol ] = { #symbol, func, uev_func, nargs + 1, flags, },
 
 struct {
     const char *name;
     int (*func)(int nargs, char **args);
+    int (*uev_func)(int nargs, char **args);
     unsigned char nargs;
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
@@ -75,6 +76,7 @@ struct {
 #define kw_is(kw, type) (keyword_info[kw].flags & (type))
 #define kw_name(kw) (keyword_info[kw].name)
 #define kw_func(kw) (keyword_info[kw].func)
+#define kw_uev_func(kw) (keyword_info[kw].uev_func ? keyword_info[kw].uev_func : keyword_info[kw].func )
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
 int lookup_keyword(const char *s)
@@ -895,4 +897,64 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
     cmd->nargs = nargs;
     memcpy(cmd->args, args, sizeof(char*) * nargs);
     list_add_tail(&act->commands, &cmd->clist);
+}
+
+extern struct listnode ltriggers;
+
+int add_uevent_trigger(int nargs, char** args)
+{
+    struct alias_trigger_node* node = NULL;
+    int i;
+    int kw;
+
+    if (nargs <= 1)
+        return -1;
+
+    kw = lookup_keyword(args[1]);
+    if (!kw_is(kw, COMMAND)) {
+        ERROR("ueventd: invalid command '%s' to be executed on %s\n",
+              args[1], args[0]);
+        return -EINVAL;
+    }
+
+    if (nargs - 1 < kw_nargs(kw)) {
+        ERROR("ueventd: invalid number of arguments '%s' to be executed on %s\n",
+              args[1], args[0]);
+        return -EINVAL;
+    }
+
+    if (!(node = calloc(1, sizeof(*node))))
+        return -ENOMEM;
+
+    node->nargs = nargs - 1;
+
+    if (!(node->args = calloc(nargs, sizeof(*node))))
+        goto nomem_node;
+
+    if (!(node->pattern = strdup(args[0] + 7))) /* arg[0] = "uevent:MODALIAS" */
+        goto nomem_args;
+
+    if (!(node->func = kw_uev_func(kw)))
+        goto nomem_pattern;
+
+    for (i = 0; i < (nargs - 1); ++i) {
+        if (!(node->args[i] = strdup(args[i + 1])))
+            goto nomem_func;
+    }
+    node->args[i] = NULL;
+
+    list_add_tail(&ltriggers, &node->plist);
+
+    return 0;
+
+ nomem_func:
+    for (i = i - 1; i >= 0; --i)
+        free(node->args[i]);
+ nomem_pattern:
+    free(node->pattern);
+ nomem_args:
+    free(node->args);
+ nomem_node:
+    free(node);
+    return -ENOMEM;
 }
