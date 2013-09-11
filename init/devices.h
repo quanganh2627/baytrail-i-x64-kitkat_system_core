@@ -27,6 +27,7 @@ struct uevent {
     const char *partition_name;
     const char *device_name;
     const char *modalias;
+    const char *type;
     const char *product;
     int partition_num;
     int major;
@@ -42,6 +43,10 @@ extern int module_probe(const char *alias);
 extern int add_dev_perms(const char *name, const char *attr,
                          mode_t perm, unsigned int uid,
                          unsigned int gid, unsigned short wildcard);
+extern int add_usb_device_class_matching(
+                         const char *devclass,
+                         mode_t perm, unsigned int uid,
+                         unsigned int gid);
 int get_device_fd();
 void coldboot(const char *path);
 #endif	/* _INIT_DEVICES_H */

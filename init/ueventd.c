@@ -171,6 +171,7 @@ void set_device_permission(int nargs, char **args)
     char *endptr;
     int ret;
     char *tmp = 0;
+    int usb_device_class_rule = 0;
 
     if (nargs == 0)
         return;
@@ -179,6 +180,15 @@ void set_device_permission(int nargs, char **args)
         return;
 
     name = args[0];
+
+    if (!strncmp(name, "usbclass:", 9)) {
+        /* skip the prefix "usbclass:" */
+        attr = args[0] + 9;
+
+        INFO("usbclass rule '%s'\n", attr);
+
+        usb_device_class_rule = 1;
+    }
 
     if (!strncmp(name,"/sys/", 5) && (nargs == 5)) {
         INFO("/sys/ rule %s %s\n",args[0],args[1]);
@@ -227,6 +237,10 @@ void set_device_permission(int nargs, char **args)
     }
     gid = ret;
 
-    add_dev_perms(name, attr, perm, uid, gid, wildcard);
+    if (usb_device_class_rule) {
+        add_usb_device_class_matching(attr, perm, uid, gid);
+    } else {
+        add_dev_perms(name, attr, perm, uid, gid, wildcard);
+    }
     free(tmp);
 }
