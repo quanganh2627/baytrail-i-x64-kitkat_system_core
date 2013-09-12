@@ -63,7 +63,7 @@ void add_environment(const char *name, const char *value);
 
 extern int init_module(void *, unsigned long, const char *);
 
-static int write_file(const char *path, const char *value)
+int write_file(const char *path, const char *value)
 {
     int fd, ret, len;
 

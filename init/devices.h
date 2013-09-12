@@ -46,7 +46,7 @@ extern int add_dev_perms(const char *name, const char *attr,
 extern int add_usb_device_class_matching(
                          const char *devclass,
                          mode_t perm, unsigned int uid,
-                         unsigned int gid);
+                         unsigned int gid, const char* options);
 int get_device_fd();
 void coldboot(const char *path);
 #endif	/* _INIT_DEVICES_H */

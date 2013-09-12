@@ -86,8 +86,14 @@ struct usb_device_class_node {
     mode_t perm;
     unsigned int uid;
     unsigned int gid;
+    unsigned short pwr_ctrl_auto;
+    unsigned short pwr_ctrl_on;
+    unsigned short pwr_ctrl_perm;
     struct listnode list;
 };
+
+/* defined in builtins.c */
+extern int write_file(const char *path, const char *value);
 
 static list_declare(sys_perms);
 static list_declare(dev_perms);
@@ -142,7 +148,7 @@ int add_dev_perms(const char *name, const char *attr,
 int add_usb_device_class_matching(
                          const char *devclass,
                          mode_t perm, unsigned int uid,
-                         unsigned int gid) {
+                         unsigned int gid, const char* options) {
     struct usb_device_class_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
@@ -154,6 +160,27 @@ int add_usb_device_class_matching(
     node->perm = perm;
     node->uid = uid;
     node->gid = gid;
+
+    if (options) {
+        /* enable autosuspend for devices */
+        if (strstr(options, "suspend_auto")) {
+            node->pwr_ctrl_auto = 1;
+            node->pwr_ctrl_on = 0;
+        }
+
+        /* disable autosuspend for devices */
+        if (strstr(options, "suspend_on")) {
+            node->pwr_ctrl_auto = 0;
+            node->pwr_ctrl_on = 1;
+        }
+
+        /* change the owner/permission for power/control
+         * sysfs node.
+         */
+        if (strstr(options, "pwr_ctrl_perm")) {
+            node->pwr_ctrl_perm = 1;
+        }
+    }
 
     list_add_tail(&usb_device_classes, &node->list);
 
@@ -543,6 +570,7 @@ static char **parse_platform_block_device(struct uevent *uevent)
 
 static void handle_usb_device_class_rule(struct uevent *uevent, const char *devpath)
 {
+    char sysfs[512];
     struct listnode *node;
     struct usb_device_class_node *usbdc;
 
@@ -560,6 +588,29 @@ static void handle_usb_device_class_rule(struct uevent *uevent, const char *devp
         /* change device node owner/permission */
         chown(devpath, usbdc->uid, usbdc->gid);
         chmod(devpath, usbdc->perm);
+
+        /* power-related options to manipulate <sysfs path>/power/control */
+        if (usbdc->pwr_ctrl_auto || usbdc->pwr_ctrl_on || usbdc->pwr_ctrl_perm) {
+            /* make sure buf is larger enough for
+             * adding "/sys" and "/power/control" and '\0'.
+             */
+            if ((strlen(uevent->path) + 4 + 14 + 1) > sizeof(sysfs))
+                continue;
+
+            sprintf(sysfs, "/sys%s/power/control", uevent->path);
+
+            if (usbdc->pwr_ctrl_auto) {
+                write_file(sysfs, "auto");
+            } else if (usbdc->pwr_ctrl_on) {
+                write_file(sysfs, "on");
+            }
+
+            if (usbdc->pwr_ctrl_perm) {
+                INFO("fixup %s %d %d 0%o\n", sysfs, usbdc->uid, usbdc->gid, usbdc->perm);
+                chown(sysfs, usbdc->uid, usbdc->gid);
+                chmod(sysfs, usbdc->perm);
+            }
+        }
     }
 }
 
