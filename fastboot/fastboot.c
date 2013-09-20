@@ -224,7 +224,7 @@ int match_fastboot(usb_ifc_info *info)
     return match_fastboot_with_serial(info, serial);
 }
 
-void list_devices_callback(char *serial, char *path)
+void list_devices_callback(const char *serial, const char *path)
 {
     // output compatible with "adb devices"
     if (!long_listing) {
@@ -283,7 +283,7 @@ void list_devices(void) {
     // just getting our callback called so we can
     // list all the connected devices.
     usb_open(list_devices_callback_usb);
-    tcp_list();
+    tcp_list(host);
 }
 
 void usage(void)
