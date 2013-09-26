@@ -34,7 +34,15 @@
 
 void bootimg_set_cmdline(boot_img_hdr *h, const char *cmdline)
 {
-    strcpy((char*) h->cmdline, cmdline);
+    size_t cmdlen = strlen(cmdline);
+
+    strncpy((char *)h->cmdline, cmdline, BOOT_ARGS_SIZE - 1);
+    h->cmdline[BOOT_ARGS_SIZE - 1] = '\0';
+    if (cmdlen >= (BOOT_ARGS_SIZE - 1)) {
+        cmdline += (BOOT_ARGS_SIZE - 1);
+        strncpy((char *)h->extra_cmdline, cmdline, BOOT_EXTRA_ARGS_SIZE);
+        h->extra_cmdline[BOOT_EXTRA_ARGS_SIZE - 1] = '\0';
+    }
 }
 
 boot_img_hdr *mkbootimg(void *kernel, unsigned kernel_size, unsigned kernel_offset,
