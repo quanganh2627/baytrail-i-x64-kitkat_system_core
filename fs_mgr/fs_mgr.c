@@ -471,6 +471,10 @@ int fs_mgr_mount_all(char *fstab_file)
             /* Success!  Go get the next one */
             continue;
         }
+        /* REVERTME: Ignore error on /factory partition */
+        if (strcmp(fstab[i].mnt_point, "/factory") == 0) {
+            continue;
+        }
 
         /* mount(2) returned an error, check if it's encrypted and deal with it */
         if ((fstab[i].fs_mgr_flags & MF_CRYPT) && !partition_wiped(fstab[i].blk_dev)) {
