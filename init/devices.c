@@ -86,6 +86,20 @@ static list_declare(dev_perms);
 static list_declare(platform_names);
 static list_declare(deferred_module_loading_list);
 
+static char *get_module_blacklist(void)
+{
+    static int initialized = 0;
+    static char *blacklist = NULL;
+    struct stat sb;
+
+    if (initialized)
+        return blacklist;
+
+    initialized = 1;
+    blacklist = stat(MODULES_BLKLST, &sb) ? NULL : MODULES_BLKLST;
+    return blacklist;
+}
+
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
                   unsigned short wildcard) {
@@ -676,7 +690,7 @@ static void handle_deferred_module_loading()
         if (alias && alias->pattern) {
             INFO("deferred loading of module for %s\n", alias->pattern);
             ret = insmod_by_dep(alias->pattern, "", NULL, 1, NULL,
-                    MODULES_BLKLST);
+                    get_module_blacklist());
             /* if it looks like file system where these files are is not
              * ready, keep the module in defer list for retry. */
             if (!(ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS))) {
@@ -704,7 +718,7 @@ static void handle_module_loading(const char *modalias)
 
     if (!modalias) return;
 
-    ret = insmod_by_dep(modalias, "", NULL, 1, NULL, MODULES_BLKLST);
+    ret = insmod_by_dep(modalias, "", NULL, 1, NULL, get_module_blacklist());
 
     if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
         node = calloc(1, sizeof(*node));
