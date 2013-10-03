@@ -1272,7 +1272,7 @@ int main(int argc, char **argv)
     int64_t now = curr_time_ms() - 1;
     int fd;
     int i;
-    char value[PROPERTY_VALUE_MAX];
+    char value[PROPERTY_VALUE_MAX], default_value[PROPERTY_VALUE_MAX];
     pthread_t t;
 
     list_init(&charger->supplies);
@@ -1321,7 +1321,8 @@ int main(int argc, char **argv)
 
     ev_sync_key_state(set_key_callback, charger);
 
-    property_get("ro.boot.min.cap", value, "BOOT_BATT_MIN_CAP_THRS");
+    sprintf(default_value, "%d", BOOT_BATT_MIN_CAP_THRS);
+    property_get("ro.boot.min.cap", value, default_value);
     sscanf(value, "%d", &charger->boot_min_cap);
     LOGI("Minimum capacity for MOS-boot:%d\n", charger->boot_min_cap);
 
