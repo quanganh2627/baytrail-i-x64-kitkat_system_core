@@ -59,6 +59,7 @@
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
+#define FIRMWARE_DIR4   "/data"
 #define MODULES_BLKLST  "/ueventd.modules.blacklist"
 #define CRDA_BIN_PATH   "/system/bin/crda"
 #define PLATFORM_STR    "platform"
@@ -1188,7 +1189,7 @@ static int is_booting(void)
 
 static void process_firmware_event(struct uevent *uevent)
 {
-    char *root, *loading, *data, *file1 = NULL, *file2 = NULL, *file3 = NULL;
+    char *root, *loading, *data, *file1 = NULL, *file2 = NULL, *file3 = NULL, *file4 = NULL;
     int l, loading_fd, data_fd, fw_fd;
     int booting = is_booting();
 
@@ -1219,6 +1220,10 @@ static void process_firmware_event(struct uevent *uevent)
     if (l == -1)
         goto data_free_out;
 
+    l = asprintf(&file4, FIRMWARE_DIR4"/%s", uevent->firmware);
+    if (l == -1)
+        goto data_free_out;
+
     loading_fd = open(loading, O_WRONLY);
     if(loading_fd < 0)
         goto file_free_out;
@@ -1234,17 +1239,20 @@ try_loading_again:
         if (fw_fd < 0) {
             fw_fd = open(file3, O_RDONLY);
             if (fw_fd < 0) {
-                if (booting) {
-                        /* If we're not fully booted, we may be missing
-                         * filesystems needed for firmware, wait and retry.
-                         */
-                    usleep(100000);
-                    booting = is_booting();
-                    goto try_loading_again;
+                fw_fd = open(file4, O_RDONLY);
+                if (fw_fd < 0) {
+                    if (booting) {
+                            /* If we're not fully booted, we may be missing
+                             * filesystems needed for firmware, wait and retry.
+                             */
+                        usleep(100000);
+                        booting = is_booting();
+                        goto try_loading_again;
+                    }
+                    INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
+                    write(loading_fd, "-1", 2);
+                    goto data_close_out;
                 }
-                INFO("firmware: could not open '%s' %d\n", uevent->firmware, errno);
-                write(loading_fd, "-1", 2);
-                goto data_close_out;
             }
         }
     }
@@ -1263,6 +1271,7 @@ file_free_out:
     free(file1);
     free(file2);
     free(file3);
+    free(file4);
 data_free_out:
     free(data);
 loading_free_out:
