@@ -23,6 +23,10 @@
 
 #include "sysdeps.h"
 
+#if !ADB_HOST
+#include <cutils/properties.h>
+#endif
+
 #define  TRACE_TAG  TRACE_SOCKETS
 #include "adb.h"
 
