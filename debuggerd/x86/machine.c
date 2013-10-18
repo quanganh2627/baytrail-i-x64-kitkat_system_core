@@ -59,7 +59,7 @@ static void dump_specific_ps_info(log_t* log, pid_t tid, uintptr_t addr, bool at
     dlerror();
     dump_ps_data_t dump_ps_data = (dump_ps_data_t) dlsym(handle, "dump_ps_data");
     const char *dlsym_error = dlerror();
-    if (dlsym_error) {
+    if (dlsym_error != 0 || dump_ps_data == 0) {
         _LOG(log, !at_fault, "\ndump_specific_ps_info: no required method in library\n");
         dlclose(handle);
         return;
