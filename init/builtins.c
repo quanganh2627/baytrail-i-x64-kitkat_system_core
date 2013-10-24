@@ -55,6 +55,7 @@
 #include <private/android_filesystem_config.h>
 
 #define TIMEZONE "/data/property/persist.sys.timezone"
+#define TIMEZONE_MAX_LINE 2048
 
 void add_environment(const char *name, const char *value);
 
@@ -686,7 +687,7 @@ int do_sysclktz(int nargs, char **args)
     struct timeval tv;
     struct tm tm;
     FILE *fp;
-    char *line = NULL;
+    char line[TIMEZONE_MAX_LINE];
     size_t len = 0;
     char const *hwtime_mode;
     time_t t;
@@ -724,7 +725,7 @@ int do_sysclktz(int nargs, char **args)
             if (fp == NULL)
                 return -1;
 
-            if (getline(&line, &len, fp) == -1)
+            if (!fgets(line, TIMEZONE_MAX_LINE, fp))
                 tz.tz_minuteswest = 0;
             else {
                 /* Hack to get timezone. */
@@ -735,8 +736,7 @@ int do_sysclktz(int nargs, char **args)
                 localtime_r(&t, &tm);
                 tz.tz_minuteswest = -(tm.tm_gmtoff / 60);
             }
-            free(line);
-            fclose(fp);
+		fclose(fp);
         }
         else
             tz.tz_minuteswest = 0;
