@@ -30,6 +30,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <string.h>
+#include <pwd.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -64,6 +65,9 @@
 #define CRDA_BIN_PATH   "/system/bin/crda"
 #define PLATFORM_STR    "platform"
 #define CHANGE_STR      "change"
+
+#define EARLY_SUSPEND_SYSFS_NAME  "early_suspend"
+#define SYSTEM_USER               "system"
 
 extern struct selabel_handle *sehandle;
 
@@ -463,12 +467,38 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
     return path;
 }
 
+void fix_early_suspend_attr_perm(const char *upath)
+{
+    char path[512];
+    struct passwd *pw;
+    struct stat info;
+
+    if (strncmp(upath, "/devices/", 9))
+        return;
+
+    sprintf(path, "/sys%s/%s", upath, EARLY_SUSPEND_SYSFS_NAME);
+
+    if (stat(path, &info) < 0)
+        return;
+
+    INFO("Early suspend supported, path: %s\n", path);
+
+    pw = getpwnam(SYSTEM_USER);
+
+    if (!pw)
+        return;
+
+    chown(path, pw->pw_uid, pw->pw_gid);
+}
+
 void fixup_sys_perms(const char *upath)
 {
     char buf[512];
     struct listnode *node;
     struct perms_ *dp;
     char *secontext;
+
+    fix_early_suspend_attr_perm(upath);
 
         /* upaths omit the "/sys" that paths in this list
          * contain, so we add 4 when comparing...
