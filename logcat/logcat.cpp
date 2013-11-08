@@ -399,7 +399,7 @@ static void show_help(const char *cmd)
                     "  -s              Set default filter to silent.\n"
                     "                  Like specifying filterspec '*:s'\n"
                     "  -f <filename>   Log to file. Default to stdout\n"
-                    "  -r [<kbytes>]   Rotate log every kbytes. (16 if unspecified). Requires -f\n"
+                    "  -r <kbytes>     Rotate log every kbytes. Requires -f\n"
                     "  -n <count>      Sets max number of rotated logs to <count>, default 4\n"
                     "  -v <format>     Sets the log print format, where <format> is one of:\n\n"
                     "                  brief process tag thread raw time threadtime long\n\n"
@@ -481,7 +481,7 @@ int main(int argc, char **argv)
     for (;;) {
         int ret;
 
-        ret = getopt(argc, argv, "cdt:gsQf:r::n:v:b:B");
+        ret = getopt(argc, argv, "cdt:gsQf:r:n:v:b:B");
 
         if (ret < 0) {
             break;
@@ -546,20 +546,15 @@ int main(int argc, char **argv)
             break;
 
             case 'r':
-                if (optarg == NULL) {                
-                    android::g_logRotateSizeKBytes 
-                                = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
-                } else {
-                    long logRotateSize;
-                    char *lastDigit;
+                long logRotateSize;
+                char *lastDigit;
 
-                    if (!isdigit(optarg[0])) {
-                        fprintf(stderr,"Invalid parameter to -r\n");
-                        android::show_help(argv[0]);
-                        exit(-1);
-                    }
-                    android::g_logRotateSizeKBytes = atoi(optarg);
+                if (!isdigit(optarg[0])) {
+                    fprintf(stderr,"Invalid parameter to -r\n");
+                    android::show_help(argv[0]);
+                    exit(-1);
                 }
+                android::g_logRotateSizeKBytes = atoi(optarg);
             break;
 
             case 'n':
