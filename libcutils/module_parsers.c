@@ -346,6 +346,7 @@ int module_parser(const char *file_name, int mode, struct listnode *head)
     state.line = 1;
     state.ptr = data;
     state.nexttoken = 0;
+    state.parse_line = NULL;
     if (mode == READ_MODULES_ALIAS) {
         state.parse_line = parse_line_module_alias;
         args_to_read = 3;
