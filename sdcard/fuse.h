@@ -146,7 +146,6 @@ struct fuse_file_lock {
 #define FOPEN_DIRECT_IO		(1 << 0)
 #define FOPEN_KEEP_CACHE	(1 << 1)
 #define FOPEN_NONSEEKABLE	(1 << 2)
-#define FOPEN_FAST_PATH		(1 << 3)
 
 /**
  * INIT request/reply flags
@@ -161,7 +160,6 @@ struct fuse_file_lock {
 #define FUSE_EXPORT_SUPPORT	(1 << 4)
 #define FUSE_BIG_WRITES		(1 << 5)
 #define FUSE_DONT_MASK		(1 << 6)
-#define FUSE_FAST_PATH_ENABLE	(1 << 16)
 
 /**
  * CUSE INIT request/reply flags
@@ -363,12 +361,7 @@ struct fuse_create_in {
 struct fuse_open_out {
 	__u64	fh;
 	__u32	open_flags;
-	union {
-		struct {
-			__u32   fh_backing;
-		};
-		__u32   padding;
-	};
+	__u32	padding;
 };
 
 struct fuse_release_in {
@@ -463,7 +456,7 @@ struct fuse_init_in {
 	__u32	flags;
 };
 
-struct fuse_init_out_old {
+struct fuse_init_out {
 	__u32	major;
 	__u32	minor;
 	__u32	max_readahead;
@@ -471,17 +464,6 @@ struct fuse_init_out_old {
 	__u16   max_background;
 	__u16   congestion_threshold;
 	__u32	max_write;
-};
-
-struct fuse_init_out {
-	uint32_t	major;
-	uint32_t	minor;
-	uint32_t	max_readahead;
-	uint32_t	flags;
-	uint16_t	max_background;
-	uint16_t	congestion_threshold;
-	uint32_t	max_write;
-	uint64_t	pid;
 };
 
 #define CUSE_INIT_INFO_MAX 4096
