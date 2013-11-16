@@ -367,7 +367,8 @@ int module_parser(const char *file_name, int mode, struct listnode *head)
     } else if (mode == READ_MODULES_BLKLST) {
         state.parse_line = parse_line_module_blacklist;
         args_to_read = 2;
-    }
+    } else
+        state.parse_line = NULL;
     for (;;) {
         int token = next_token(&state);
         switch (token) {
