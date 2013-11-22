@@ -217,21 +217,23 @@ static void print_header(void) {
     printf("%2s %2s  %6s %6s %6s %6s  %4s %4s %4s  %2s %2s %2s %2s %2s %2s\n", "r", "b", "free", "mapped", "anon", "slab", "in", "cs", "flt", "us", "ni", "sy", "id", "wa", "ir");
 }
 
-#define NORM(var, t) (((var) * 100 + (t)/2L) / (t))
+/* Jiffies to percent conversion */
+#define JP(jif) ((jif) * 100 / (HZ))
+#define NORM(var) ((var) = (((var) > 99) ? (99) : (var)))
+
 static void print_line(struct state *old, struct state *new) {
-    long us, ni, sy, id, wa, ir, t;
-    us = new->cpu_us - old->cpu_us;
-    ni = new->cpu_ni - old->cpu_ni;
-    sy = new->cpu_sy - old->cpu_sy;
-    id = new->cpu_id - old->cpu_id;
-    wa = new->cpu_wa - old->cpu_wa;
-    ir = new->cpu_ir - old->cpu_ir;
-    t = us + ni + sy + id + wa + ir + (new->cpu_si - old->cpu_si);
-    printf("%2ld %2ld  %6ld %6ld %6ld %6ld  %4ld %4ld %4ld  %2ld %2ld %2ld %2ld %2ld %2ld\n",
+    int us, ni, sy, id, wa, ir;
+    us = JP(new->cpu_us - old->cpu_us); NORM(us);
+    ni = JP(new->cpu_ni - old->cpu_ni); NORM(ni);
+    sy = JP(new->cpu_sy - old->cpu_sy); NORM(sy);
+    id = JP(new->cpu_id - old->cpu_id); NORM(id);
+    wa = JP(new->cpu_wa - old->cpu_wa); NORM(wa);
+    ir = JP(new->cpu_ir - old->cpu_ir); NORM(ir);
+    printf("%2ld %2ld  %6ld %6ld %6ld %6ld  %4ld %4ld %4ld  %2d %2d %2d %2d %2d %2d\n",
         new->procs_r ? (new->procs_r - 1) : 0, new->procs_b,
         new->mem_free, new->mem_mapped, new->mem_anon, new->mem_slab,
         new->sys_in - old->sys_in, new->sys_cs - old->sys_cs, new->sys_flt - old->sys_flt,
-        NORM(us,t), NORM(ni,t), NORM(sy,t), NORM(id,t), NORM(wa,t), NORM(ir,t));
+        us, ni, sy, id, wa, ir);
 }
 
 static void usage(char *cmd) {

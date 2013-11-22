@@ -73,13 +73,6 @@
 #define AID_LOOP_RADIO    1030  /* loop radio devices */
 #define AID_MEDIA_DRM     1031  /* MediaDrm plugins */
 
-/* Non-AOSP user ID:
- * As the system partition can be updated over the air, AID numbers should never be changed.
- * That's why it's better to pick-up the highest possible number for non-aosp aid:
- * This will allow the  AOSP user list to grow in the future without impacting non-asop aid.
- */
-#define AID_SMARTCARD     1999  /* smart card subsystem */
-
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
 #define AID_DIAG          2002  /* access to diagnostic resources */
@@ -94,10 +87,6 @@
 #define AID_NET_BW_STATS  3006  /* read bandwidth statistics */
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
-#define AID_SEP_GROUP     3700  /* This is for the security processor */
-/* The range AID_CONT_FIRST - AID_CONT_LAST is reserved for containers */
-#define AID_CONT_FIRST    3701
-#define AID_CONT_LAST     3704
 
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
@@ -150,7 +139,6 @@ static const struct android_id_info android_ids[] = {
     { "media_rw",  AID_MEDIA_RW, },
     { "vpn",       AID_VPN, },
     { "keystore",  AID_KEYSTORE, },
-    { "smartcard", AID_SMARTCARD, },
     { "usb",       AID_USB, },
     { "mtp",       AID_MTP, },
     { "gps",       AID_GPS, },
@@ -161,11 +149,6 @@ static const struct android_id_info android_ids[] = {
     { "net_bw_acct", AID_NET_BW_ACCT, },
     { "loop_radio", AID_LOOP_RADIO, },
     { "misc",      AID_MISC, },
-    { "security",  AID_SEP_GROUP },
-    { "container1",  AID_CONT_FIRST, },
-    { "container2",  AID_CONT_FIRST + 1, },
-    { "container3",  AID_CONT_FIRST + 2, },
-    { "container4",  AID_CONT_FIRST + 3, },
     { "nobody",    AID_NOBODY, },
     { "clat",      AID_CLAT, },
     { "mediadrm",  AID_MEDIA_DRM, },

@@ -18,10 +18,6 @@
 #ifndef __LIBS_LOGWRAP_H
 #define __LIBS_LOGWRAP_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
 
 __BEGIN_DECLS
@@ -83,9 +79,5 @@ static inline int android_fork_execvp(int argc, char* argv[], int *status,
 
 
 __END_DECLS
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* __LIBS_LOGWRAP_H */

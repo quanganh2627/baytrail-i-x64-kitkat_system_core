@@ -46,10 +46,6 @@
 #define LOG_STARTFILE   "/data/bootchart-start"
 #define LOG_STOPFILE    "/data/bootchart-stop"
 
-#ifdef MANUALENABLE
-int enablechart = 0;
-#endif
-
 static int
 unix_read(int  fd, void*  buff, int  len)
 {

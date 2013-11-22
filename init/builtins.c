@@ -34,9 +34,6 @@
 #include <cutils/partition_utils.h>
 #include <sys/system_properties.h>
 #include <fs_mgr.h>
-#include <fnmatch.h>
-#include <dirent.h>
-#include <cutils/probe_module.h>
 
 #include <selinux/selinux.h>
 #include <selinux/label.h>
@@ -50,14 +47,6 @@
 #include "log.h"
 
 #include <private/android_filesystem_config.h>
-
-#ifndef PROPERTY_VALUE_MAX
-#  define PROPERTY_VALUE_MAX 92
-#endif
-
-#ifndef PROPERTY_KEY_MAX
-#  define PROPERTY_KEY_MAX 32
-#endif
 
 void add_environment(const char *name, const char *value);
 
@@ -300,40 +289,6 @@ int do_insmod(int nargs, char **args)
     return do_insmod_inner(nargs, args, size);
 }
 
-static int do_probemod_inner(int nargs, char **args, int opt_len)
-{
-    char options[opt_len + 1];
-    int i;
-    int ret;
-
-    options[0] = '\0';
-    if (nargs > 2) {
-        strcpy(options, args[2]);
-        for (i = 3; i < nargs; ++i) {
-            strcat(options, " ");
-            strcat(options, args[i]);
-        }
-    }
-
-    ret = insmod_by_dep(args[1], options, NULL, 1, NULL, NULL);
-    if (ret)
-        ERROR("Couldn't probe module '%s'\n", args[1]);
-    return ret;
-}
-
-int do_probemod(int nargs, char **args)
-{
-    int i;
-    int size = 0;
-
-    if (nargs > 2) {
-        for (i = 2; i < nargs; ++i)
-            size += strlen(args[i]) + 1;
-    }
-
-    return do_probemod_inner(nargs, args, size);
-}
-
 int do_mkdir(int nargs, char **args)
 {
     mode_t mode = 0755;
@@ -510,8 +465,6 @@ int do_mount_all(int nargs, char **args)
     int status;
     const char *prop;
     struct fstab *fstab;
-    char prop_val[PROP_VALUE_MAX];
-
 
     if (nargs != 2) {
         return -1;
@@ -535,12 +488,7 @@ int do_mount_all(int nargs, char **args)
     } else if (pid == 0) {
         /* child, call fs_mgr_mount_all() */
         klog_set_level(6);  /* So we can see what fs_mgr_mount_all() does */
-        ret = expand_props(prop_val, args[1], sizeof(prop_val));
-        if (ret) {
-            ERROR("cannot expand '%s' while assigning to '%s'\n", args[1], prop_val);
-            return -1;
-        }
-        fstab = fs_mgr_read_fstab(prop_val);
+        fstab = fs_mgr_read_fstab(args[1]);
         child_ret = fs_mgr_mount_all(fstab);
         fs_mgr_free_fstab(fstab);
         if (child_ret == -1) {
@@ -594,16 +542,6 @@ int do_setkey(int nargs, char **args)
     return setkey(&kbe);
 }
 
-int do_builtin_coldboot(int nargs, char **args)
-{
-    if (nargs != 2 || !args[1] || *args[1] == '\0')
-        return -1;
-
-    coldboot(args[1]);
-
-    return 0;
-}
-
 int do_setprop(int nargs, char **args)
 {
     const char *name = args[1];
@@ -618,64 +556,6 @@ int do_setprop(int nargs, char **args)
     }
     property_set(name, prop_val);
     return 0;
-}
-
-static int append_to_file(const char* path, const char *data, size_t len)
-{
-    int fd = -1;
-    int ret = 0;
-
-    fd = TEMP_FAILURE_RETRY(open(path, O_WRONLY | O_CREAT | O_APPEND, 0640));
-    if (fd < 0) {
-        ERROR("Failed to open %s (%s)",
-              path, strerror(errno));
-        return -errno;
-    }
-
-    if (TEMP_FAILURE_RETRY(write(fd, data, len)) != (int) len) {
-        ERROR("Failed to write %s in %s (%s)",
-              data, path, strerror(errno));
-        ret = -errno;
-    }
-
-    close(fd);
-    return ret;
-}
-
-static int uevent_temporary_setprop(char* name, char* prop_val)
-{
-    /*  "key" + "=" + "value" + "\n\0" */
-    char buff[PROPERTY_KEY_MAX + 1 + PROPERTY_VALUE_MAX + 2];
-    int len = -1;
-
-    len = snprintf(buff, sizeof(buff), "%s=%s\n", name, prop_val);
-
-    append_to_file(PROP_PATH_UEVENTD, buff, (len >= (int) sizeof(buff) ? sizeof(buff) : len));
-
-    return 0;
-}
-
-int do_ext_setprop(int nargs, char **args)
-{
-    const char *name = args[1];
-    const char *value = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
-
-    ret = expand_props(prop_val, value, sizeof(prop_val));
-    if (ret) {
-        ERROR("cannot expand '%s' while assigning to '%s'\n", value, name);
-        return -EINVAL;
-    }
-    if ((ret = __system_property_set(name, prop_val)) < 0) {
-        /*
-         * property_service is not running at this time so we put the
-         * properties in temporary space.
-         */
-        ret = uevent_temporary_setprop(name, prop_val);
-    }
-
-    return ret;
 }
 
 int do_setrlimit(int nargs, char **args)
@@ -767,41 +647,6 @@ int do_write(int nargs, char **args)
         return -EINVAL;
     }
     return write_file(path, prop_val);
-}
-
-int do_setprop_from_sysfs(int nargs, char **args)
-{
-    const char *path = args[1];
-    const char *prop_name = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
-    int fd;
-    unsigned sz;
-
-    if (strncmp(path, "/sys/", sizeof("/sys/") - 1)) {
-        ERROR("read from /sys only: '%s'\n", path);
-        return -EINVAL;
-    }
-
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        ERROR("cannot open '%s': '%s'\n", path, strerror(errno));
-        return fd;
-    }
-
-    sz = read(fd, prop_val, PROP_VALUE_MAX-1);
-    if (sz <= 0) {
-        ERROR("cannot read from '%s': '%s'\n", path, strerror(errno));
-        ret = sz;
-        goto oops;
-    }
-
-    prop_val[sz-1] = '\0';
-    ret = property_set(prop_name, prop_val);
-
-oops:
-    close(fd);
-    return ret;
 }
 
 int do_copy(int nargs, char **args)

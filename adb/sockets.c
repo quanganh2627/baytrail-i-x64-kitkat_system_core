@@ -199,9 +199,7 @@ static void local_socket_close(asocket *s)
 static void local_socket_destroy(asocket  *s)
 {
     apacket *p, *n;
-#if !ADB_HOST
     int exit_on_close = s->exit_on_close;
-#endif
 
     D("LS(%d): destroying fde.fd=%d\n", s->id, s->fde.fd);
 
@@ -219,12 +217,10 @@ static void local_socket_destroy(asocket  *s)
     remove_socket(s);
     free(s);
 
-#if !ADB_HOST
     if (exit_on_close) {
         D("local_socket_destroy: exiting\n");
         exit(1);
     }
-#endif
 }
 
 
@@ -415,10 +411,6 @@ asocket *create_local_service_socket(const char *name)
 {
     asocket *s;
     int fd;
-#if !ADB_HOST
-    char value[PROPERTY_VALUE_MAX];
-    char debug[PROPERTY_VALUE_MAX];
-#endif
 
 #if !ADB_HOST
     if (!strcmp(name,"jdwp")) {
@@ -435,11 +427,8 @@ asocket *create_local_service_socket(const char *name)
     D("LS(%d): bound to '%s' via %d\n", s->id, name, fd);
 
 #if !ADB_HOST
-    property_get("service.adb.tcp.port", value, "0");
-    property_get("ro.debuggable", debug, "");
-    if ((!strncmp(name, "root:", 5) && getuid() != 0 &&
-         strcmp(debug, "1") == 0)
-        || (!strncmp(name, "usb:", 4) && strcmp(value, "0"))
+    if ((!strncmp(name, "root:", 5) && getuid() != 0)
+        || !strncmp(name, "usb:", 4)
         || !strncmp(name, "tcpip:", 6)) {
         D("LS(%d): enabling exit_on_close\n", s->id);
         s->exit_on_close = 1;

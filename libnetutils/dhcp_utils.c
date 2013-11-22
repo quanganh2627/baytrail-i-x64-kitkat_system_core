@@ -138,9 +138,6 @@ static int fill_ip_info(const char *interface,
             mask = mask << 1;
         }
         *prefixLength = p;
-    } else {
-        snprintf(errmsg, sizeof(errmsg), "Could not get the value of property:  %s", prop_name);
-        return -1;
     }
 
     for (x=0; dns[x] != NULL; x++) {

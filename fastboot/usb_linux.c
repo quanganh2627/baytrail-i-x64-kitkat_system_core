@@ -198,13 +198,8 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
     }
 
     for(i = 0; i < cfg->bNumInterfaces; i++) {
-        if(check(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE)) {
-            len -= ptr[0];
-            ptr += ptr[0];
-            i--;
-            continue;
-        }
-
+        if(check(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE))
+            return -1;
         ifc = (void*) ptr;
         len -= ifc->bLength;
         ptr += ifc->bLength;
@@ -216,13 +211,8 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
         info.ifc_protocol = ifc->bInterfaceProtocol;
 
         for(e = 0; e < ifc->bNumEndpoints; e++) {
-            if(check(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE)) {
-            len -= ptr[0];
-            ptr += ptr[0];
-            e--;
-            continue;
-        }
-
+            if(check(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE))
+                return -1;
             ept = (void*) ptr;
             len -= ept->bLength;
             ptr += ept->bLength;
@@ -318,9 +308,8 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
     return usb;
 }
 
-int usb_write(void *userdata, const void *_data, int len)
+int usb_write(usb_handle *h, const void *_data, int len)
 {
-    struct usb_handle *h = userdata;
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
     struct usbdevfs_bulktransfer bulk;
@@ -369,9 +358,8 @@ int usb_write(void *userdata, const void *_data, int len)
     return count;
 }
 
-int usb_read(void *userdata, void *_data, int len)
+int usb_read(usb_handle *h, void *_data, int len)
 {
-    struct usb_handle *h = userdata;
     unsigned char *data = (unsigned char*) _data;
     unsigned count = 0;
     struct usbdevfs_bulktransfer bulk;
@@ -427,9 +415,8 @@ void usb_kick(usb_handle *h)
     }
 }
 
-int usb_close(void *userdata)
+int usb_close(usb_handle *h)
 {
-    struct usb_handle *h = userdata;
     int fd;
 
     fd = h->desc;

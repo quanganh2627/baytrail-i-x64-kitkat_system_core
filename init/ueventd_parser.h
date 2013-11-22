@@ -21,8 +21,5 @@
 
 int ueventd_parse_config_file(const char *fn);
 void set_device_permission(int nargs, char **args);
-void set_module_args(int nargs, char **args);
-void set_uevent_trigger(int nargs, char **args);
-int add_uevent_trigger(int nargs, char** args);
 
 #endif

@@ -21,8 +21,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <signal.h>
-#include <libgen.h>
-#include <errno.h>
+
 #include <private/android_filesystem_config.h>
 
 #include "ueventd.h"
@@ -48,54 +47,11 @@ static void import_kernel_nv(char *name, int in_qemu)
     }
 }
 
-static void do_event_loop(void (*handle_event_fp)(struct uevent*)) __attribute__ ((noreturn));
-static void do_event_loop(void (*handle_event_fp)(struct uevent*))
+int ueventd_main(int argc, char **argv)
 {
     struct pollfd ufd;
     int nr;
-
-    ufd.events = POLLIN;
-    ufd.fd = get_device_fd();
-
-    while(1) {
-        ufd.revents = 0;
-        nr = poll(&ufd, 1, -1);
-        if (nr <= 0)
-            continue;
-        if (ufd.revents == POLLIN)
-            handle_events_fd(handle_event_fp);
-    }
-}
-
-
-int ueventd_main(int argc, char **argv)
-{
     char tmp[32];
-    pid_t pid;
-
-    /* kernel will launch a program in user space to load
-     * modules, by default it is modprobe.
-     * Kernel doesn't send module parameters, so we don't
-     * need to support them.
-     * No deferred loading in this case.
-     */
-    if (!strcmp(basename(argv[0]), "modprobe")) {
-        if (argc >= 4
-                && argv[3] != NULL
-                && *argv[3] != '\0') {
-            uid_t uid;
-
-            /* We only accept requests from root user (kernel) */
-            uid = getuid();
-            if (uid)
-                return -EPERM;
-
-            return module_probe(argv[3]);
-        } else {
-            /* modprobe is called without enough arguments */
-            return -EINVAL;
-        }
-    }
 
     /*
      * init sets the umask to 077 for forked processes. We need to
@@ -128,25 +84,18 @@ int ueventd_main(int argc, char **argv)
     snprintf(tmp, sizeof(tmp), "/ueventd.%s.rc", hardware);
     ueventd_parse_config_file(tmp);
 
-    pid = fork();
+    device_init();
 
-    /* We fork here because we want to process the device drivers loading
-     * independently from the device firmware loading.
-     * If we do drivers and firmware events processing in the same process we
-     * will block the driver loading because ueventd cannot load it's corresponding
-     * firmware (requested by driver).
-     */
-    if (pid < 0) {
-        ERROR("Failed to fork in ueventd!\n");
-        return -1;
-    } else if (pid > 0) {
-        /* In parent we loop for device events for loading drivers */
-        device_init();
-        do_event_loop(handle_device_crda_event);
-    } else {
-        /* In child we loop for device events for loading firmware */
-        uevent_fd_init();
-        do_event_loop(handle_firmware_event);
+    ufd.events = POLLIN;
+    ufd.fd = get_device_fd();
+
+    while(1) {
+        ufd.revents = 0;
+        nr = poll(&ufd, 1, -1);
+        if (nr <= 0)
+            continue;
+        if (ufd.revents == POLLIN)
+               handle_device_fd();
     }
 }
 
@@ -166,7 +115,7 @@ void set_device_permission(int nargs, char **args)
     mode_t perm;
     uid_t uid;
     gid_t gid;
-    int wildcard = 0;
+    int prefix = 0;
     char *endptr;
     int ret;
     char *tmp = 0;
@@ -198,8 +147,10 @@ void set_device_permission(int nargs, char **args)
             asprintf(&tmp, "/dev/mtd/mtd%d", n);
         name = tmp;
     } else {
-        if (strchr(name, '*')) {
-            wildcard = 1;
+        int len = strlen(name);
+        if (name[len - 1] == '*') {
+            prefix = 1;
+            name[len - 1] = '\0';
         }
     }
 
@@ -226,34 +177,6 @@ void set_device_permission(int nargs, char **args)
     }
     gid = ret;
 
-    add_dev_perms(name, attr, perm, uid, gid, wildcard);
+    add_dev_perms(name, attr, perm, uid, gid, prefix);
     free(tmp);
-}
-
-void set_module_args(int nargs, char **args)
-{
-    char *mod_name;
-
-    if (nargs == 0)
-        return;
-
-    if (args[0][0] == '#')
-        return;
-
-    mod_name = args[0] + 4;
-
-    add_mod_args(nargs, mod_name, args);
-}
-
-void set_uevent_trigger(int nargs, char** args)
-{
-    char* modalias;
-
-    if (nargs <= 1)
-        return;
-
-    if (args[0][0] == '#')
-        return;
-
-    add_uevent_trigger(nargs, args);
 }

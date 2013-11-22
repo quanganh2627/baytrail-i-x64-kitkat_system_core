@@ -5,52 +5,39 @@
 #include <sys/klog.h>
 #include <string.h>
 
-#define KLOG_BUF_MAX_SHIFT  20    /* Currently, CONFIG_LOG_BUF_SHIFT from our kernel is 19 */
-#define KLOG_BUF_MAX_LEN    (1 << KLOG_BUF_MAX_SHIFT)
+#define KLOG_BUF_SHIFT	17	/* CONFIG_LOG_BUF_SHIFT from our kernel */
+#define KLOG_BUF_LEN	(1 << KLOG_BUF_SHIFT)
 
 int dmesg_main(int argc, char **argv)
 {
-    char *buffer, *p;
+    char buffer[KLOG_BUF_LEN + 1];
+    char *p = buffer;
     ssize_t ret;
-    int n, op, len;
+    int n, op;
 
-    len = klogctl(KLOG_WRITE, NULL, 0);    /* read ring buffer size */
-    if (len > KLOG_BUF_MAX_LEN)
-        len = KLOG_BUF_MAX_LEN;
-    buffer = malloc(len + 1);
-    if (!buffer) {
-        perror("klogctl");
-        return EXIT_FAILURE;
-    }
-
-    if ((argc == 2) && (!strcmp(argv[1], "-c"))) {
+    if((argc == 2) && (!strcmp(argv[1],"-c"))) {
         op = KLOG_READ_CLEAR;
     } else {
         op = KLOG_READ_ALL;
     }
 
-    n = klogctl(op, buffer, len);
+    n = klogctl(op, buffer, KLOG_BUF_LEN);
     if (n < 0) {
         perror("klogctl");
-        free(buffer);
         return EXIT_FAILURE;
     }
     buffer[n] = '\0';
 
-    p = buffer;
-    while ((ret = write(STDOUT_FILENO, p, n))) {
+    while((ret = write(STDOUT_FILENO, p, n))) {
         if (ret == -1) {
-            if (errno == EINTR)
+	    if (errno == EINTR)
                 continue;
-            perror("write");
-            free(buffer);
-            return EXIT_FAILURE;
-        }
-        p += ret;
-        n -= ret;
+	    perror("write");
+	    return EXIT_FAILURE;
+	}
+	p += ret;
+	n -= ret;
     }
-
-    free(buffer);
 
     return 0;
 }

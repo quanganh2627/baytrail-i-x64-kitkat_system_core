@@ -19,8 +19,6 @@
 
 #include <stdbool.h>
 
-#define PROP_PATH_UEVENTD "/dev/.ueventd_properties"
-
 extern void handle_property_set_fd(void);
 extern void property_init(void);
 extern void property_load_boot_defaults(void);

@@ -12,7 +12,6 @@ ifeq ($(strip $(BOARD_CHARGER_DISABLE_INIT_BLANK)),true)
 LOCAL_CFLAGS := -DCHARGER_DISABLE_INIT_BLANK
 endif
 
-BOARD_CHARGER_ENABLE_SUSPEND := true
 ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_CFLAGS += -DCHARGER_ENABLE_SUSPEND
 endif
@@ -30,11 +29,6 @@ ifeq ($(strip $(BOARD_CHARGER_ENABLE_SUSPEND)),true)
 LOCAL_STATIC_LIBRARIES += libsuspend
 endif
 LOCAL_STATIC_LIBRARIES += libz libstdc++ libcutils liblog libm libc
-
-#libpixelflinger_static for x86 is using encoder under hardware/intel/apache-harmony
-ifeq ($(TARGET_ARCH),x86)
-LOCAL_STATIC_LIBRARIES += libenc
-endif
 
 include $(BUILD_EXECUTABLE)
 

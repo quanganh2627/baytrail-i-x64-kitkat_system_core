@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * This file was modified by Dolby Laboratories, Inc. The portions of the
- * code that are surrounded by "DOLBY..." are copyrighted and
- * licensed separately, as follows:
- *
- *  (C) 2011-2013 Dolby Laboratories, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  */
 
 #include <stdio.h>
@@ -99,10 +80,7 @@ struct {
     { "sys.",             AID_SYSTEM,   0 },
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
-    { "gps.",             AID_GPS,      0 },
-    { "wpa_supplicant.",  AID_WIFI,     0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
-    { "nfc.",             AID_NFC,      0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
     { "debug.",           AID_SYSTEM,   0 },
@@ -113,19 +91,8 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
-    { "persist.gps.",      AID_GPS,      0 },
     { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
-    { "media.",           AID_MEDIA,    0 },
     { "selinux."         , AID_SYSTEM,   0 },
-    { "AudioComms.",       AID_MEDIA,    0 },
-    { "audiocomms.",       AID_MEDIA,    0 },
-#ifdef DOLBY_UDC
-    { "dolby.audio",      AID_MEDIA,    0 },
-#endif // DOLBY_UDC
-#ifdef DOLBY_DAP
-    // used for setting Dolby specific properties
-    { "dolby.", AID_SYSTEM,   0 },
-#endif // DOLBY_DAP
     { NULL, 0, 0 }
 };
 
@@ -140,8 +107,6 @@ struct {
 } control_perms[] = {
     { "dumpstate",AID_SHELL, AID_LOG },
     { "ril-daemon",AID_RADIO, AID_RADIO },
-    { "pcsc",AID_WIFI, AID_WIFI },  /* Allow wpa_supplicant to start the pcsc-lite daemon used for EAP-SIM/AKA auth */
-    { "uim",AID_BLUETOOTH, AID_BLUETOOTH },
      {NULL, 0, 0 }
 };
 
@@ -186,12 +151,12 @@ out:
     return -1;
 }
 
-/* (8 header words + 496 toc words) = 2016 bytes */
-/* 2048 bytes header and toc + 496 prop_infos @ 128 bytes = 65536 bytes */
+/* (8 header words + 372 toc words) = 1520 bytes */
+/* 1536 bytes header and toc + 372 prop_infos @ 128 bytes = 49152 bytes */
 
-#define PA_COUNT_MAX  496
-#define PA_INFO_START 2048
-#define PA_SIZE       65536
+#define PA_COUNT_MAX  372
+#define PA_INFO_START 1536
+#define PA_SIZE       49152
 
 static workspace pa_workspace;
 static prop_info *pa_info_array;
@@ -378,19 +343,15 @@ int property_set(const char *name, const char *value)
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX || valuelen >= PROP_VALUE_MAX || namelen < 1) {
-        ERROR("sys_prop: invalid property %s[%d] %s[%d]\n", name, namelen, value, valuelen);
-        return -1;
-    }
+    if(namelen >= PROP_NAME_MAX) return -1;
+    if(valuelen >= PROP_VALUE_MAX) return -1;
+    if(namelen < 1) return -1;
 
     pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
-        if(!strncmp(name, "ro.", 3)) {
-            ERROR("sys_prop: unable to set read only property %s\n", name);
-            return -1;
-        }
+        if(!strncmp(name, "ro.", 3)) return -1;
 
         pa = __system_property_area__;
         update_prop_info(pi, value, valuelen);
@@ -398,18 +359,7 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     } else {
         pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) {
-            int i;
-            ERROR("sys_prop: unable to set property %s: maximum number of property reached\n", name);
-
-            ERROR("sys_prop: properties dump:\n");
-            for (i = 0; i < PA_COUNT_MAX; i++) {
-                pi = TOC_TO_INFO(pa, pa->toc[i]);
-
-                ERROR("sys_prop:\t[%s]: [%s]\n", pi->name, pi->value);
-            }
-            return -1;
-        }
+        if(pa->count == PA_COUNT_MAX) return -1;
 
         pi = pa_info_array + pa->count;
         pi->serial = (valuelen << 24);
@@ -680,7 +630,6 @@ void start_property_service(void)
 
     listen(fd, 8);
     property_set_fd = fd;
-    load_properties_from_file(PROP_PATH_UEVENTD);
 }
 
 int get_property_set_fd()
