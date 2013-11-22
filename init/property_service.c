@@ -12,6 +12,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * This file was modified by Dolby Laboratories, Inc. The portions of the
+ * code that are surrounded by "DOLBY..." are copyrighted and
+ * licensed separately, as follows:
+ *
+ *  (C) 2011-2013 Dolby Laboratories, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
  */
 
 #include <stdio.h>
@@ -78,8 +97,11 @@ struct {
     { "runtime.",         AID_SYSTEM,   0 },
     { "hw.",              AID_SYSTEM,   0 },
     { "sys.",             AID_SYSTEM,   0 },
+    { "sys.powerctl",     AID_SHELL,    0 },
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
+    { "wpa_supplicant.",  AID_WIFI,     0 },
+    { "gps.",             AID_GPS,      0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
@@ -91,8 +113,19 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
+    { "persist.gps.",      AID_GPS,      0 },
     { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
+    { "media.",           AID_MEDIA,    0 },
     { "selinux."         , AID_SYSTEM,   0 },
+    { "AudioComms.",       AID_MEDIA,    0 },
+    { "audiocomms.",       AID_MEDIA,    0 },
+#ifdef DOLBY_UDC
+    { "dolby.audio",      AID_MEDIA,    0 },
+#endif // DOLBY_UDC
+#ifdef DOLBY_DAP
+    // used for setting Dolby specific properties
+    { "dolby.", AID_SYSTEM,   0 },
+#endif // DOLBY_DAP
     { NULL, 0, 0 }
 };
 
@@ -111,7 +144,6 @@ struct {
 };
 
 typedef struct {
-    void *data;
     size_t size;
     int fd;
 } workspace;
@@ -119,81 +151,32 @@ typedef struct {
 static int init_workspace(workspace *w, size_t size)
 {
     void *data;
-    int fd;
-
-        /* dev is a tmpfs that we can use to carve a shared workspace
-         * out of, so let's do that...
-         */
-    fd = open(PROP_FILENAME, O_RDWR | O_CREAT | O_NOFOLLOW, 0644);
+    int fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return -1;
 
-    if (ftruncate(fd, size) < 0)
-        goto out;
-
-    data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if(data == MAP_FAILED)
-        goto out;
-
-    close(fd);
-
-    fd = open(PROP_FILENAME, O_RDONLY | O_NOFOLLOW);
-    if (fd < 0)
-        return -1;
-
-    w->data = data;
     w->size = size;
     w->fd = fd;
     return 0;
-
-out:
-    close(fd);
-    return -1;
 }
 
-/* (8 header words + 372 toc words) = 1520 bytes */
-/* 1536 bytes header and toc + 372 prop_infos @ 128 bytes = 49152 bytes */
-
-#define PA_COUNT_MAX  372
-#define PA_INFO_START 1536
-#define PA_SIZE       49152
-
 static workspace pa_workspace;
-static prop_info *pa_info_array;
-
-extern prop_area *__system_property_area__;
 
 static int init_property_area(void)
 {
-    prop_area *pa;
-
-    if(pa_info_array)
+    if (property_area_inited)
         return -1;
 
-    if(init_workspace(&pa_workspace, PA_SIZE))
+    if(__system_property_area_init())
+        return -1;
+
+    if(init_workspace(&pa_workspace, 0))
         return -1;
 
     fcntl(pa_workspace.fd, F_SETFD, FD_CLOEXEC);
 
-    pa_info_array = (void*) (((char*) pa_workspace.data) + PA_INFO_START);
-
-    pa = pa_workspace.data;
-    memset(pa, 0, PA_SIZE);
-    pa->magic = PROP_AREA_MAGIC;
-    pa->version = PROP_AREA_VERSION;
-
-        /* plug into the lib property services */
-    __system_property_area__ = pa;
     property_area_inited = 1;
     return 0;
-}
-
-static void update_prop_info(prop_info *pi, const char *value, unsigned len)
-{
-    pi->serial = pi->serial | 1;
-    memcpy(pi->value, value, len + 1);
-    pi->serial = (len << 24) | ((pi->serial + 1) & 0xffffff);
-    __futex_wake(&pi->serial, INT32_MAX);
 }
 
 static int check_mac_perms(const char *name, char *sctx)
@@ -298,19 +281,9 @@ static int check_perms(const char *name, unsigned int uid, unsigned int gid, cha
     return 0;
 }
 
-const char* property_get(const char *name)
+int __property_get(const char *name, char *value)
 {
-    prop_info *pi;
-
-    if(strlen(name) >= PROP_NAME_MAX) return 0;
-
-    pi = (prop_info*) __system_property_find(name);
-
-    if(pi != 0) {
-        return pi->value;
-    } else {
-        return 0;
-    }
+    return __system_property_get(name, value);
 }
 
 static void write_persistent_property(const char *name, const char *value)
@@ -335,17 +308,44 @@ static void write_persistent_property(const char *name, const char *value)
     }
 }
 
+static bool is_legal_property_name(const char* name, size_t namelen)
+{
+    size_t i;
+    bool previous_was_dot = false;
+    if (namelen >= PROP_NAME_MAX) return false;
+    if (namelen < 1) return false;
+    if (name[0] == '.') return false;
+    if (name[namelen - 1] == '.') return false;
+
+    /* Only allow alphanumeric, plus '.', '-', or '_' */
+    /* Don't allow ".." to appear in a property name */
+    for (i = 0; i < namelen; i++) {
+        if (name[i] == '.') {
+            if (previous_was_dot == true) return false;
+            previous_was_dot = true;
+            continue;
+        }
+        previous_was_dot = false;
+        if (name[i] == '_' || name[i] == '-') continue;
+        if (name[i] >= 'a' && name[i] <= 'z') continue;
+        if (name[i] >= 'A' && name[i] <= 'Z') continue;
+        if (name[i] >= '0' && name[i] <= '9') continue;
+        return false;
+    }
+
+    return true;
+}
+
 int property_set(const char *name, const char *value)
 {
-    prop_area *pa;
     prop_info *pi;
+    int ret;
 
     size_t namelen = strlen(name);
     size_t valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX) return -1;
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    if(namelen < 1) return -1;
+    if (!is_legal_property_name(name, namelen)) return -1;
+    if (valuelen >= PROP_VALUE_MAX) return -1;
 
     pi = (prop_info*) __system_property_find(name);
 
@@ -353,25 +353,13 @@ int property_set(const char *name, const char *value)
         /* ro.* properties may NEVER be modified once set */
         if(!strncmp(name, "ro.", 3)) return -1;
 
-        pa = __system_property_area__;
-        update_prop_info(pi, value, valuelen);
-        pa->serial++;
-        __futex_wake(&pa->serial, INT32_MAX);
+        __system_property_update(pi, value, valuelen);
     } else {
-        pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) return -1;
-
-        pi = pa_info_array + pa->count;
-        pi->serial = (valuelen << 24);
-        memcpy(pi->name, name, namelen + 1);
-        memcpy(pi->value, value, valuelen + 1);
-
-        pa->toc[pa->count] =
-            (namelen << 24) | (((unsigned) pi) - ((unsigned) pa));
-
-        pa->count++;
-        pa->serial++;
-        __futex_wake(&pa->serial, INT32_MAX);
+        ret = __system_property_add(name, namelen, value, valuelen);
+        if (ret < 0) {
+            ERROR("Failed to set '%s'='%s'\n", name, value);
+            return ret;
+        }
     }
     /* If name starts with "net." treat as a DNS property. */
     if (strncmp("net.", name, strlen("net.")) == 0)  {
@@ -434,6 +422,12 @@ void handle_property_set_fd()
     case PROP_MSG_SETPROP:
         msg.name[PROP_NAME_MAX-1] = 0;
         msg.value[PROP_VALUE_MAX-1] = 0;
+
+        if (!is_legal_property_name(msg.name, strlen(msg.name))) {
+            ERROR("sys_prop: illegal property name. Got: \"%s\"\n", msg.name);
+            close(s);
+            return;
+        }
 
         getpeercon(s, &source_ctx);
 
@@ -593,8 +587,11 @@ int properties_inited(void)
 
 static void load_override_properties() {
 #ifdef ALLOW_LOCAL_PROP_OVERRIDE
-    const char *debuggable = property_get("ro.debuggable");
-    if (debuggable && (strcmp(debuggable, "1") == 0)) {
+    char debuggable[PROP_VALUE_MAX];
+    int ret;
+
+    ret = property_get("ro.debuggable", debuggable);
+    if (ret && (strcmp(debuggable, "1") == 0)) {
         load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
     }
 #endif /* ALLOW_LOCAL_PROP_OVERRIDE */
@@ -630,6 +627,7 @@ void start_property_service(void)
 
     listen(fd, 8);
     property_set_fd = fd;
+    load_properties_from_file(PROP_PATH_UEVENTD);
 }
 
 int get_property_set_fd()

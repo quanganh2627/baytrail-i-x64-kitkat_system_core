@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <fnmatch.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,16 +41,24 @@
 #include <sys/wait.h>
 
 #include <cutils/list.h>
+#include <cutils/probe_module.h>
 #include <cutils/uevent.h>
+#include <cutils/module_parsers.h>
 
 #include "devices.h"
 #include "util.h"
 #include "log.h"
+#include "parser.h"
+#include "init_parser.h"
 
 #define SYSFS_PREFIX    "/sys"
 #define FIRMWARE_DIR1   "/etc/firmware"
 #define FIRMWARE_DIR2   "/vendor/firmware"
 #define FIRMWARE_DIR3   "/firmware/image"
+#define MODULES_BLKLST  "/ueventd.modules.blacklist"
+#define CRDA_BIN_PATH   "/system/bin/crda"
+#define PLATFORM_STR    "platform"
+#define CHANGE_STR      "change"
 
 extern struct selabel_handle *sehandle;
 
@@ -62,9 +71,16 @@ struct uevent {
     const char *firmware;
     const char *partition_name;
     const char *device_name;
+    const char *country;
+    const char *modalias;
     int partition_num;
     int major;
     int minor;
+};
+
+struct mod_args_ {
+    char *name;
+    char *args;
 };
 
 struct perms_ {
@@ -73,7 +89,12 @@ struct perms_ {
     mode_t perm;
     unsigned int uid;
     unsigned int gid;
-    unsigned short prefix;
+    unsigned short wildcard;
+};
+
+struct mod_arg_node {
+    struct mod_args_ mod_args;
+    struct listnode plist;
 };
 
 struct perm_node {
@@ -88,13 +109,18 @@ struct platform_node {
     struct listnode list;
 };
 
+static list_declare(lmodalias);
+list_declare(ltriggers);
+
+static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
+static list_declare(deferred_module_loading_list);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
-                  unsigned short prefix) {
+                  unsigned short wildcard) {
     struct perm_node *node = calloc(1, sizeof(*node));
     if (!node)
         return -ENOMEM;
@@ -112,7 +138,7 @@ int add_dev_perms(const char *name, const char *attr,
     node->dp.perm = perm;
     node->dp.uid = uid;
     node->dp.gid = gid;
-    node->dp.prefix = prefix;
+    node->dp.wildcard = wildcard;
 
     if (attr)
         list_add_tail(&sys_perms, &node->plist);
@@ -122,19 +148,49 @@ int add_dev_perms(const char *name, const char *attr,
     return 0;
 }
 
+int add_mod_args(int nargs, const char *mod_name, char *args[])
+{
+    struct mod_arg_node *node = calloc(1, sizeof(*node));
+    char tmp_mod_args[1024];
+    int i = 0;
+
+    if (!node)
+        return -ENOMEM;
+
+    node->mod_args.name = strdup(mod_name);
+    if (!node->mod_args.name)
+        return -ENOMEM;
+
+    tmp_mod_args[0] = 0;
+    for ( i = 1; i < nargs; ++i) {
+        strlcat(tmp_mod_args, args[i], sizeof(tmp_mod_args));
+        strlcat(tmp_mod_args, " ", sizeof(tmp_mod_args));
+    }
+
+    node->mod_args.args = strdup(tmp_mod_args);
+
+    if (!node->mod_args.args)
+            return -ENOMEM;
+
+    list_add_tail(&lmod_args, &node->plist);
+
+    return 0;
+}
+
 void fixup_sys_perms(const char *upath)
 {
     char buf[512];
     struct listnode *node;
     struct perms_ *dp;
+    char *secontext;
 
         /* upaths omit the "/sys" that paths in this list
          * contain, so we add 4 when comparing...
          */
     list_for_each(node, &sys_perms) {
         dp = &(node_to_item(node, struct perm_node, plist))->dp;
-        if (dp->prefix) {
-            if (strncmp(upath, dp->name + 4, strlen(dp->name + 4)))
+        if (dp->wildcard) {
+            if (fnmatch(dp->name + 4, upath, 0) != 0)
                 continue;
         } else {
             if (strcmp(upath, dp->name + 4))
@@ -148,6 +204,14 @@ void fixup_sys_perms(const char *upath)
         INFO("fixup %s %d %d 0%o\n", buf, dp->uid, dp->gid, dp->perm);
         chown(buf, dp->uid, dp->gid);
         chmod(buf, dp->perm);
+        if (sehandle) {
+            secontext = NULL;
+            selabel_lookup(sehandle, &secontext, buf, 0);
+            if (secontext) {
+                setfilecon(buf, secontext);
+                freecon(secontext);
+           }
+        }
     }
 }
 
@@ -165,8 +229,8 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
         perm_node = node_to_item(node, struct perm_node, plist);
         dp = &perm_node->dp;
 
-        if (dp->prefix) {
-            if (strncmp(path, dp->name, strlen(dp->name)))
+        if (dp->wildcard) {
+            if (fnmatch(dp->name, path, 0) != 0)
                 continue;
         } else {
             if (strcmp(path, dp->name))
@@ -182,10 +246,39 @@ static mode_t get_device_perm(const char *path, unsigned *uid, unsigned *gid)
     return 0600;
 }
 
-static void make_device(const char *path,
-                        const char *upath,
-                        int block, int major, int minor)
+const char *get_mod_args(const char *mod_name)
 {
+    struct listnode *node = NULL;
+    struct mod_arg_node *mod_arg_node = NULL;
+    struct mod_args_ *mod_args = NULL;
+    char * real_mod_name = NULL;
+
+    if (list_empty(&lmodalias)) {
+        parse_alias_to_list("/lib/modules/modules.alias", &lmodalias);
+    }
+
+    if (!get_module_name_from_alias(mod_name, &real_mod_name, &lmodalias))
+        mod_name = real_mod_name;
+
+    list_for_each(node, &lmod_args) {
+        mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
+        mod_args = &mod_arg_node->mod_args;
+
+
+        if (!strcmp(mod_name, mod_args->name)) {
+            return mod_args->args;
+        }
+    }
+
+    return "";
+}
+
+static void make_device(struct uevent *uevent,
+                        const char *path,
+                        int block)
+{
+    int major = uevent->major;
+    int minor = uevent->minor;
     unsigned uid;
     unsigned gid;
     mode_t mode;
@@ -310,11 +403,13 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->path = "";
     uevent->subsystem = "";
     uevent->firmware = "";
+    uevent->country = "";
     uevent->major = -1;
     uevent->minor = -1;
     uevent->partition_name = NULL;
     uevent->partition_num = -1;
     uevent->device_name = NULL;
+    uevent->modalias = NULL;
 
         /* currently ignoring SEQNUM */
     while(*msg) {
@@ -345,6 +440,12 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
+        } else if (!strncmp(msg, "COUNTRY=", 8)) {
+            msg += 8;
+            uevent->country = msg;
+        } else if (!strncmp(msg, "MODALIAS=", 9)) {
+            msg += 9;
+            uevent->modalias = msg;
         }
 
         /* advance to after the next \0 */
@@ -352,9 +453,10 @@ static void parse_event(const char *msg, struct uevent *uevent)
             ;
     }
 
-    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d }\n",
+    log_event_print("event { '%s', '%s', '%s', '%s', %d, %d, '%s' }\n",
                     uevent->action, uevent->path, uevent->subsystem,
-                    uevent->firmware, uevent->major, uevent->minor);
+                    uevent->firmware, uevent->major, uevent->minor,
+                    uevent->country);
 }
 
 static char **get_character_device_symlinks(struct uevent *uevent)
@@ -442,6 +544,8 @@ static char **parse_platform_block_device(struct uevent *uevent)
     if (uevent->partition_name) {
         p = strdup(uevent->partition_name);
         sanitize(p);
+        if (strcmp(uevent->partition_name, p))
+            NOTICE("Linking partition '%s' as '%s'\n", uevent->partition_name, p);
         if (asprintf(&links[link_num], "%s/by-name/%s", link_path, p) > 0)
             link_num++;
         else
@@ -465,13 +569,16 @@ static char **parse_platform_block_device(struct uevent *uevent)
     return links;
 }
 
-static void handle_device(const char *action, const char *devpath,
-        const char *path, int block, int major, int minor, char **links)
+static void handle_device(struct uevent *uevent,
+                          const char *devpath,
+                          int block,
+                          char **links)
 {
     int i;
+    const char *action = uevent->action;
 
     if(!strcmp(action, "add")) {
-        make_device(devpath, path, block, major, minor);
+        make_device(uevent, devpath, block);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
@@ -541,8 +648,7 @@ static void handle_block_device_event(struct uevent *uevent)
     if (!strncmp(uevent->path, "/devices/", 9))
         links = parse_platform_block_device(uevent);
 
-    handle_device(uevent->action, devpath, uevent->path, 1,
-            uevent->major, uevent->minor, links);
+    handle_device(uevent, devpath, 1, links);
 }
 
 static void handle_generic_device_event(struct uevent *uevent)
@@ -631,12 +737,77 @@ static void handle_generic_device_event(struct uevent *uevent)
      if (!devpath[0])
          snprintf(devpath, sizeof(devpath), "%s%s", base, name);
 
-     handle_device(uevent->action, devpath, uevent->path, 0,
-             uevent->major, uevent->minor, links);
+     handle_device(uevent, devpath, 0, links);
+}
+
+static void handle_deferred_module_loading()
+{
+    struct listnode *node = NULL;
+    struct listnode *next = NULL;
+    struct module_alias_node *alias = NULL;
+    int ret = -1;
+
+    list_for_each_safe(node, next, &deferred_module_loading_list) {
+        alias = node_to_item(node, struct module_alias_node, list);
+
+        if (alias && alias->pattern) {
+            INFO("deferred loading of module for %s\n", alias->pattern);
+            ret = insmod_by_dep(alias->pattern, get_mod_args(alias->pattern), NULL, 1, NULL,
+                    MODULES_BLKLST);
+            /* if it looks like file system where these files are is not
+             * ready, keep the module in defer list for retry. */
+            if (!(ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS))) {
+                free(alias->pattern);
+                list_remove(node);
+                free(alias);
+            }
+        }
+    }
+}
+
+int module_probe(const char *modalias)
+{
+    return insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
+}
+
+static void handle_module_loading(const char *modalias)
+{
+    char *tmp;
+    struct module_alias_node *node;
+    int ret;
+
+    if (!modalias) return;
+
+    handle_deferred_module_loading();
+
+    ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
+
+    if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
+        node = calloc(1, sizeof(*node));
+        if (node) {
+            node->pattern = strdup(modalias);
+            if (!node->pattern) {
+                free(node);
+            } else {
+                list_add_tail(&deferred_module_loading_list, &node->list);
+                INFO("add to queue for deferred module loading: %s",
+                        node->pattern);
+            }
+        } else {
+            ERROR("failed to allocate memory to store device id for deferred module loading.\n");
+        }
+    }
 }
 
 static void handle_device_event(struct uevent *uevent)
 {
+    if (!strcmp(uevent->action,"add")) {
+        if (uevent->modalias) {
+                handle_module_loading(uevent->modalias);
+                handle_modalias_triggers(uevent->modalias);
+        }
+    }
+
     if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
         fixup_sys_perms(uevent->path);
 
@@ -785,6 +956,61 @@ root_free_out:
     free(root);
 }
 
+static int handle_crda_event(struct uevent *uevent)
+{
+    int status;
+    int ret;
+    pid_t pid;
+    char country_env[11];
+    char *argv[] = { CRDA_BIN_PATH, NULL };
+    char *envp[] = { country_env  , NULL };
+
+    if(strncmp(uevent->subsystem, PLATFORM_STR, strlen(PLATFORM_STR)))
+       return (-1);
+
+    if(strncmp(uevent->action, CHANGE_STR, strlen(CHANGE_STR)))
+       return (-1);
+
+    INFO("executing CRDA country=%s\n", uevent->country);
+    snprintf(country_env, sizeof(country_env), "COUNTRY=%s", uevent->country);
+
+    if (access(argv[0], X_OK)) {
+        INFO("crda_event not handled - no crda executable\n");
+        return -1;
+    }
+
+    switch(pid = fork()) {
+    case -1:
+         /* Error occured */
+         ERROR("handle_crda_event - fork error\n");
+         return (-1);
+         break;
+    case  0:
+         /* Child related processing */
+         if (execve(argv[0], argv, envp) ==  -1) {
+              ERROR("handle_crda_event - execve error\n");
+              return (-1);
+         }
+         break;
+    default:
+         /* Parent related processing */
+         /*
+          * man waitpid: POSIX.1-2001 specifies that if the disposition
+          * of SIGCHLD is set to SIG_IGN, then children that terminate
+          * do not become zombies and a call to waitpid() will block
+          * until all children have terminated, and then fail with errno
+          * set to ECHILD.
+          * With ICS, google has introduced this behavior in "ueventd.c"
+          *          signal(SIGCHLD, SIG_IGN);
+          * So handling of waitpid() return is no more needed.
+          */
+          waitpid (pid, &status,0);
+          break;
+    }
+
+    return 0;
+}
+
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
@@ -821,6 +1047,7 @@ void handle_device_fd()
 
         handle_device_event(&uevent);
         handle_firmware_event(&uevent);
+        handle_crda_event(&uevent);
     }
 }
 
@@ -867,7 +1094,7 @@ static void do_coldboot(DIR *d)
     }
 }
 
-static void coldboot(const char *path)
+void coldboot(const char *path)
 {
     DIR *d = opendir(path);
     if(d) {
@@ -912,4 +1139,18 @@ void device_init(void)
 int get_device_fd()
 {
     return device_fd;
+}
+
+void handle_modalias_triggers(const char* modalias)
+{
+    struct listnode* node_ptr;
+    struct alias_trigger_node* node;
+    int i;
+
+    list_for_each(node_ptr, &ltriggers) {
+        node = node_to_item(node_ptr, struct alias_trigger_node, plist);
+        if (!fnmatch(node->pattern, modalias, 0)) {
+            node->func(node->nargs, node->args);
+        }
+    }
 }

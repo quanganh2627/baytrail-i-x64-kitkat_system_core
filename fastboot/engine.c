@@ -110,7 +110,7 @@ struct image_data {
 void generate_ext4_image(struct image_data *image);
 void cleanup_image(struct image_data *image);
 
-int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...)
+int fb_getvar(transport_t *trans, char *response, const char *fmt, ...)
 {
     char cmd[CMD_SIZE] = "getvar:";
     int getvar_len = strlen(cmd);
@@ -121,7 +121,7 @@ int fb_getvar(struct usb_handle *usb, char *response, const char *fmt, ...)
     vsnprintf(cmd + getvar_len, sizeof(cmd) - getvar_len, fmt, args);
     va_end(args);
     cmd[CMD_SIZE - 1] = '\0';
-    return fb_command_response(usb, cmd, response);
+    return fb_command_response(trans, cmd, response);
 }
 
 struct generator {
@@ -150,14 +150,14 @@ struct generator {
  * Not all devices report the filesystem type, so don't report any errors,
  * just return false.
  */
-int fb_format_supported(usb_handle *usb, const char *partition)
+int fb_format_supported(transport_t *trans, const char *partition)
 {
     char response[FB_RESPONSE_SZ+1];
     struct generator *generator = NULL;
     int status;
     unsigned int i;
 
-    status = fb_getvar(usb, response, "partition-type:%s", partition);
+    status = fb_getvar(trans, response, "partition-type:%s", partition);
     if (status) {
         return 0;
     }
@@ -286,21 +286,7 @@ void generate_ext4_image(struct image_data *image)
     int fd;
     struct stat st;
 
-#ifdef USE_MINGW
-    /* Ideally we should use tmpfile() here, the same as with unix version.
-     * But unfortunately it is not portable as it is not clear whether this
-     * function opens file in TEXT or BINARY mode.
-     *
-     * There are also some reports it is buggy:
-     *    http://pdplab.it.uom.gr/teaching/gcc_manuals/gnulib.html#tmpfile
-     *    http://www.mega-nerd.com/erikd/Blog/Windiots/tmpfile.html
-     */
-    char *filename = tempnam(getenv("TEMP"), "fastboot-format.img");
-    fd = open(filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0644);
-    unlink(filename);
-#else
     fd = fileno(tmpfile());
-#endif
     make_ext4fs_sparse_fd(fd, image->partition_size, NULL, NULL);
 
     fstat(fd, &st);
@@ -310,7 +296,7 @@ void generate_ext4_image(struct image_data *image)
     close(fd);
 }
 
-int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
+int fb_format(Action *a, transport_t *transport, int skip_if_not_supported)
 {
     const char *partition = a->cmd;
     char response[FB_RESPONSE_SZ+1];
@@ -321,7 +307,7 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
     unsigned i;
     char cmd[CMD_SIZE];
 
-    status = fb_getvar(usb, response, "partition-type:%s", partition);
+    status = fb_getvar(transport, response, "partition-type:%s", partition);
     if (status) {
         if (skip_if_not_supported) {
             fprintf(stderr,
@@ -353,7 +339,7 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
         return -1;
     }
 
-    status = fb_getvar(usb, response, "partition-size:%s", partition);
+    status = fb_getvar(transport, response, "partition-size:%s", partition);
     if (status) {
         if (skip_if_not_supported) {
             fprintf(stderr,
@@ -375,12 +361,12 @@ int fb_format(Action *a, usb_handle *usb, int skip_if_not_supported)
     // Following piece of code is similar to fb_queue_flash() but executes
     // actions directly without queuing
     fprintf(stderr, "sending '%s' (%lli KB)...\n", partition, image.image_size/1024);
-    status = fb_download_data(usb, image.buffer, image.image_size);
+    status = fb_download_data(transport, image.buffer, image.image_size);
     if (status) goto cleanup;
 
     fprintf(stderr, "writing '%s'...\n", partition);
     snprintf(cmd, sizeof(cmd), "flash:%s", partition);
-    status = fb_command(usb, cmd);
+    status = fb_command(transport, cmd);
     if (status) goto cleanup;
 
 cleanup:
@@ -587,7 +573,7 @@ void fb_queue_notice(const char *notice)
     a->data = (void*) notice;
 }
 
-int fb_execute_queue(usb_handle *usb)
+int fb_execute_queue(transport_t *transport)
 {
     Action *a;
     char resp[FB_RESPONSE_SZ+1];
@@ -607,25 +593,25 @@ int fb_execute_queue(usb_handle *usb)
             fprintf(stderr,"%s...\n",a->msg);
         }
         if (a->op == OP_DOWNLOAD) {
-            status = fb_download_data(usb, a->data, a->size);
+            status = fb_download_data(transport, a->data, a->size);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_COMMAND) {
-            status = fb_command(usb, a->cmd);
+            status = fb_command(transport, a->cmd);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_QUERY) {
-            status = fb_command_response(usb, a->cmd, resp);
+            status = fb_command_response(transport, a->cmd, resp);
             status = a->func(a, status, status ? fb_get_error() : resp);
             if (status) break;
         } else if (a->op == OP_NOTICE) {
             fprintf(stderr,"%s\n",(char*)a->data);
         } else if (a->op == OP_FORMAT) {
-            status = fb_format(a, usb, (int)a->data);
+            status = fb_format(a, transport, (int)a->data);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else if (a->op == OP_DOWNLOAD_SPARSE) {
-            status = fb_download_data_sparse(usb, a->data);
+            status = fb_download_data_sparse(transport, a->data);
             status = a->func(a, status, status ? fb_get_error() : "");
             if (status) break;
         } else {

@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <ctype.h>
+#include <fnmatch.h>
 
 #include "init.h"
 #include "parser.h"
@@ -57,12 +58,13 @@ static void parse_line_action(struct parse_state *state, int nargs, char **args)
 
 #include "keywords.h"
 
-#define KEYWORD(symbol, flags, nargs, func) \
-    [ K_##symbol ] = { #symbol, func, nargs + 1, flags, },
+#define KEYWORD(symbol, flags, nargs, func, uev_func) \
+    [ K_##symbol ] = { #symbol, func, uev_func, nargs + 1, flags, },
 
 struct {
     const char *name;
     int (*func)(int nargs, char **args);
+    int (*uev_func)(int nargs, char **args);
     unsigned char nargs;
     unsigned char flags;
 } keyword_info[KEYWORD_COUNT] = {
@@ -74,6 +76,7 @@ struct {
 #define kw_is(kw, type) (keyword_info[kw].flags & (type))
 #define kw_name(kw) (keyword_info[kw].name)
 #define kw_func(kw) (keyword_info[kw].func)
+#define kw_uev_func(kw) (keyword_info[kw].uev_func ? keyword_info[kw].uev_func : keyword_info[kw].func )
 #define kw_nargs(kw) (keyword_info[kw].nargs)
 
 int lookup_keyword(const char *s)
@@ -91,6 +94,7 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "onsole")) return K_console;
         if (!strcmp(s, "hown")) return K_chown;
         if (!strcmp(s, "hmod")) return K_chmod;
+        if (!strcmp(s, "oldboot")) return K_coldboot;
         if (!strcmp(s, "ritical")) return K_critical;
         break;
     case 'd':
@@ -130,6 +134,9 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "neshot")) return K_oneshot;
         if (!strcmp(s, "nrestart")) return K_onrestart;
         break;
+    case 'p':
+        if (!strcmp(s, "owerctl")) return K_powerctl;
+        else if (!strcmp(s, "robemod")) return K_probemod;
     case 'r':
         if (!strcmp(s, "estart")) return K_restart;
         if (!strcmp(s, "estorecon")) return K_restorecon;
@@ -144,11 +151,13 @@ int lookup_keyword(const char *s)
         if (!strcmp(s, "etenv")) return K_setenv;
         if (!strcmp(s, "etkey")) return K_setkey;
         if (!strcmp(s, "etprop")) return K_setprop;
+        if (!strcmp(s, "etprop_from_sysfs")) return K_setprop_from_sysfs;
         if (!strcmp(s, "etrlimit")) return K_setrlimit;
         if (!strcmp(s, "etsebool")) return K_setsebool;
         if (!strcmp(s, "ocket")) return K_socket;
         if (!strcmp(s, "tart")) return K_start;
         if (!strcmp(s, "top")) return K_stop;
+        if (!strcmp(s, "wapon_all")) return K_swapon_all;
         if (!strcmp(s, "ymlink")) return K_symlink;
         if (!strcmp(s, "ysclktz")) return K_sysclktz;
         break;
@@ -206,8 +215,9 @@ int expand_props(char *dst, const char *src, int dst_size)
     while (*src_ptr && left > 0) {
         char *c;
         char prop[PROP_NAME_MAX + 1];
-        const char *prop_val;
+        char prop_val[PROP_VALUE_MAX];
         int prop_len = 0;
+        int prop_val_len;
 
         c = strchr(src_ptr, '$');
         if (!c) {
@@ -265,14 +275,14 @@ int expand_props(char *dst, const char *src, int dst_size)
             goto err;
         }
 
-        prop_val = property_get(prop);
-        if (!prop_val) {
+        prop_val_len = property_get(prop, prop_val);
+        if (!prop_val_len) {
             ERROR("property '%s' doesn't exist while expanding '%s'\n",
                   prop, src);
             goto err;
         }
 
-        ret = push_chars(&dst_ptr, &left, prop_val, strlen(prop_val));
+        ret = push_chars(&dst_ptr, &left, prop_val, prop_val_len);
         if (ret < 0)
             goto err_nospace;
         src_ptr = c;
@@ -530,6 +540,32 @@ void queue_property_triggers(const char *name, const char *value)
     }
 }
 
+void action_for_each_property_trigger(const char *name, const char *value,
+                                      void (*func)(struct action *act))
+{
+    struct listnode *node;
+    struct action *act;
+
+    if (strncmp(name, "ro.", 3)!=0) return ;
+
+    list_for_each(node, &action_list) {
+        act = node_to_item(node, struct action, alist);
+        if (!strncmp(act->name, "property:", strlen("property:"))) {
+            const char *test = act->name + strlen("property:");
+            int name_length = strlen(name);
+
+            if (!strncmp(name, test, name_length) &&
+                    test[name_length] == '=' &&
+                    !fnmatch(test + name_length + 1, value, 0)) {
+                func(act);
+            }
+        }
+    }
+}
+void clear_action_list() {
+    list_init(&action_list);
+}
+
 void queue_all_property_triggers()
 {
     struct listnode *node;
@@ -543,7 +579,7 @@ void queue_all_property_triggers()
             const char* equals = strchr(name, '=');
             if (equals) {
                 char prop_name[PROP_NAME_MAX + 1];
-                const char* value;
+                char value[PROP_VALUE_MAX];
                 int length = equals - name;
                 if (length > PROP_NAME_MAX) {
                     ERROR("property name too long in trigger %s", act->name);
@@ -552,9 +588,8 @@ void queue_all_property_triggers()
                     prop_name[length] = 0;
 
                     /* does the property exist, and match the trigger value? */
-                    value = property_get(prop_name);
-                    if (value && (!strcmp(equals + 1, value) ||
-                                  !strcmp(equals + 1, "*"))) {
+                    property_get(prop_name, value);
+                    if (!strcmp(equals + 1, value) ||!strcmp(equals + 1, "*")) {
                         action_add_queue_tail(act);
                     }
                 }
@@ -863,4 +898,64 @@ static void parse_line_action(struct parse_state* state, int nargs, char **args)
     cmd->nargs = nargs;
     memcpy(cmd->args, args, sizeof(char*) * nargs);
     list_add_tail(&act->commands, &cmd->clist);
+}
+
+extern struct listnode ltriggers;
+
+int add_uevent_trigger(int nargs, char** args)
+{
+    struct alias_trigger_node* node = NULL;
+    int i;
+    int kw;
+
+    if (nargs <= 1)
+        return -1;
+
+    kw = lookup_keyword(args[1]);
+    if (!kw_is(kw, COMMAND)) {
+        ERROR("ueventd: invalid command '%s' to be executed on %s\n",
+              args[1], args[0]);
+        return -EINVAL;
+    }
+
+    if (nargs - 1 < kw_nargs(kw)) {
+        ERROR("ueventd: invalid number of arguments '%s' to be executed on %s\n",
+              args[1], args[0]);
+        return -EINVAL;
+    }
+
+    if (!(node = calloc(1, sizeof(*node))))
+        return -ENOMEM;
+
+    node->nargs = nargs - 1;
+
+    if (!(node->args = calloc(nargs, sizeof(*node))))
+        goto nomem_node;
+
+    if (!(node->pattern = strdup(args[0] + 7))) /* arg[0] = "uevent:MODALIAS" */
+        goto nomem_args;
+
+    if (!(node->func = kw_uev_func(kw)))
+        goto nomem_pattern;
+
+    for (i = 0; i < (nargs - 1); ++i) {
+        if (!(node->args[i] = strdup(args[i + 1])))
+            goto nomem_func;
+    }
+    node->args[i] = NULL;
+
+    list_add_tail(&ltriggers, &node->plist);
+
+    return 0;
+
+ nomem_func:
+    for (i = i - 1; i >= 0; --i)
+        free(node->args[i]);
+ nomem_pattern:
+    free(node->pattern);
+ nomem_args:
+    free(node->args);
+ nomem_node:
+    free(node);
+    return -ENOMEM;
 }
