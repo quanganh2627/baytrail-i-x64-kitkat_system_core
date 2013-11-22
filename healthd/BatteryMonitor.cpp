@@ -337,16 +337,23 @@ void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
 
                 if (mHealthdConfig->batteryVoltagePath.isEmpty()) {
                     path.clear();
-                    path.appendFormat("%s/%s/voltage_now",
+                    path.appendFormat("%s/%s/voltage_ocv",
                                       POWER_SUPPLY_SYSFS_PATH, name);
                     if (access(path, R_OK) == 0) {
                         mHealthdConfig->batteryVoltagePath = path;
                     } else {
                         path.clear();
-                        path.appendFormat("%s/%s/batt_vol",
+                        path.appendFormat("%s/%s/voltage_now",
                                           POWER_SUPPLY_SYSFS_PATH, name);
-                        if (access(path, R_OK) == 0)
+                        if (access(path, R_OK) == 0) {
                             mHealthdConfig->batteryVoltagePath = path;
+                        } else {
+                            path.clear();
+                            path.appendFormat("%s/%s/batt_vol",
+                                              POWER_SUPPLY_SYSFS_PATH, name);
+                            if (access(path, R_OK) == 0)
+                                mHealthdConfig->batteryVoltagePath = path;
+                        }
                     }
                 }
 
