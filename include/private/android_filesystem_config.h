@@ -99,6 +99,9 @@
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
 #define AID_SEP_GROUP     3700  /* This is for the security processor */
+/* The range AID_CONT_FIRST - AID_CONT_LAST is reserved for containers */
+#define AID_CONT_FIRST    3701
+#define AID_CONT_LAST     3704
 
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
@@ -175,6 +178,10 @@ static const struct android_id_info android_ids[] = {
 
     { "misc",          AID_MISC, },
     { "security",  AID_SEP_GROUP },
+    { "container1", AID_CONT_FIRST, },
+    { "container2", AID_CONT_FIRST + 1, },
+    { "container3", AID_CONT_FIRST + 2, },
+    { "container4", AID_CONT_FIRST + 3, },
     { "nobody",        AID_NOBODY, },
 
     // Non-Aosp user id
