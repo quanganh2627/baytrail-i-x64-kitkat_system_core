@@ -401,7 +401,14 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x40 // used for remote background playback
 } audio_output_flags_t;
 
-/* The audio input flags are analogous to audio output flags.
+typedef enum {
+    AUDIO_OFFLOAD_NONE    = 0x00000000,    // offload none
+    VIDEO_OFFLOAD         = 0x00000001,    // offload audio in AV files
+    EFFECTS_OFFLOAD       = 0x00000002,    // offload effects
+    MC_OFFLOAD            = 0x00000004,    // offload multi channel content
+ } audio_offload_format_t;
+
+ /* The audio input flags are analogous to audio output flags.
  * Currently they are used only when an AudioRecord is created,
  * to indicate a preference to be connected to an input stream with
  * attributes corresponding to the specified flags.
