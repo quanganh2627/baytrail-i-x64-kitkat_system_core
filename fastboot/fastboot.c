@@ -241,7 +241,7 @@ int match_fastboot(usb_ifc_info *info)
     return match_fastboot_with_serial(info, serial);
 }
 
-void list_devices_callback(char *serial, char *path)
+void list_devices_callback(const char *serial, const char *path)
 {
     // output compatible with "adb devices"
     if (!long_listing) {
@@ -300,7 +300,7 @@ void list_devices(void) {
     // just getting our callback called so we can
     // list all the connected devices.
     usb_open(list_devices_callback_usb);
-    tcp_list();
+    tcp_list(host);
 }
 
 void usage(void)
@@ -1077,7 +1077,9 @@ int main(int argc, char **argv)
             if (erase_first && needs_erase(pname)) {
                 fb_queue_erase(pname);
             }
-            do_flash(&transport, pname, fname);
+            data = load_file(fname, &sz);
+            if (data == 0) die("cannot load '%s': %s\n", fname, strerror(errno));
+            fb_queue_flash(pname, data, sz);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
             char *kname = argv[2];
