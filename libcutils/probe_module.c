@@ -32,6 +32,7 @@
 #define LDM_DEFAULT_DEP_FILE "/lib/modules/modules.dep"
 #define LDM_DEFAULT_MOD_PATH "/lib/modules/"
 #define LDM_INIT_DEP_NUM 10
+#define LDM_DEFAULT_LINE_SZ 1024
 
 extern int init_module(void *, unsigned long, const char *);
 extern int delete_module(const char *, unsigned int);
@@ -95,98 +96,112 @@ static int match_name(const char *s1, const char *s2, const size_t size)
 /* check if a line in dep file is target module's dependency.
  * return 1 when it is, otherwise 0 in any other cases.
  */
-static int is_target_module(char *line, const char *target)
+#define SUFFIX_SIZE 3
+static int is_target_module(char *line, const char *target, size_t line_size)
 {
     char *token;
-    char *name;
     size_t name_len;
-    const char *suffix = ".ko";
-    const char *delimiter = ":";
     int ret = 0;
+    char *s;
 
-    /* search token */
-    token = strstr(line, delimiter);
+    /* search : */
+    token = strchr(line, ':');
 
-    if (!token) {
+    if (!token || token > line + line_size) {
         ALOGE("invalid line: no token\n");
         return 0;
     }
+    /* go backward to first / */
+    for (s = token; *s != '/' && s > line ; s--);
 
-    /* only take stuff before the token */
-    *token = '\0';
+    if (*s == '/')
+        s++;
 
-    /* use "module.ko" in comparision */
-    name_len = strlen(suffix) + strlen(target) + 1;
+    name_len = strlen(target);
 
-    name = malloc(sizeof(char) * name_len);
-
-    if (!name) {
-        ALOGE("cannot alloc ram for comparision\n");
+    /* check length */
+    if (s + name_len + SUFFIX_SIZE != token)
         return 0;
-    }
 
-    snprintf(name, name_len, "%s%s", target, suffix);
+    /* check basename */
+    if (match_name(s, target, name_len))
+        return 0;
 
-    ret = !match_name(strip_path(line), name, name_len);
+    /* check suffix */
+    if (strncmp(".ko", &s[name_len], SUFFIX_SIZE))
+        return 0;
 
-    /* restore [single] token, keep line unchanged until we parse it later */
-    *token = *delimiter;
-
-    free(name);
-
-    return ret;
-
+    return 1;
 }
 
 /* turn a single string into an array of dependency.
  *
- * return: dependency array's address if it succeeded. Caller
- *         is responsible to free the array's memory.
- *         NULL when any error happens.
+ * return: an array of pointer to each dependency,
+ * followed by the dependency strings. so free(dep) is
+ * enough to free everything.
  */
-static char** setup_dep(char *line)
+static char** setup_dep(char *line, size_t line_size)
 {
-    char *tmp;
-    char *brk;
-    int dep_num = LDM_INIT_DEP_NUM;
-    char **new;
+    char *start;
+    char *end;
+    int dep_num = 0;
     int i;
     char **dep = NULL;
+    char *deplist;
+    size_t len;
 
-    dep = malloc(sizeof(char *) * dep_num);
+    /* Count the dependency (by counting space)
+     * to allocate the right size for the array
+     */
+    start = line;
+    end = strchr(start, ' ');
+    for (dep_num = 1; end != NULL && end < line + line_size; end = strchr(start, ' ')) {
+        dep_num++;
+        start = end + 1;
+    }
 
+    /* allocate the dep pointer table and the strings at once */
+    dep = malloc(sizeof(*dep) * (dep_num + 1) + line_size + 1);
     if (!dep) {
         ALOGE("cannot alloc dep array\n");
         return dep;
     }
 
-    for (i = 0, tmp = strtok_r(line, ": ", &brk);
-            tmp;
-            tmp = strtok_r(NULL, ": ", &brk), i++) {
+    /* put the deplist after the pointer table */
+    deplist = (char *) &dep[dep_num + 1];
 
-        /* check if we need enlarge dep array */
-        if (!(i < dep_num - 1)) {
+    /* Now copy the line from modules.dep to a list of strings :
+     * main_mod.ko: dep1.ko dep2.ko
+     * into :
+     * main_mod.ko\0\0dep1.ko\0dep2.ko\0
+     * and update pointer array to the beginning of each string.
+     */
+    dep[0] = deplist;
+    memcpy(deplist, line, line_size);
+    deplist[line_size] = '\0';
 
-            dep_num += LDM_INIT_DEP_NUM;
-
-            new = realloc(dep, dep_num);
-
-            if (!new) {
-                ALOGE("failed to enlarge dep buffer\n");
-                free(dep);
-                return NULL;
-            }
-            else
-                dep = new;
-        }
-
-        dep[i] = tmp;
-
+    start = deplist;
+    for (i = 1 ; i < dep_num ; i++) {
+        end = strchr(start, ' ');
+        if (!end)
+            goto err;
+        *end = '\0';
+        start = end + 1;
+        dep[i] = start;
     }
-    /* terminate array with a null pointer */
-    dep[i] = NULL;
+    /* remove ':' for main module */
+    end = strchr(deplist, ':');
+    if (end)
+        *end = '\0';
 
+    /* terminate array with a null pointer */
+    dep[dep_num] = NULL;
     return dep;
+
+    err:
+    ALOGE("%s Error when parsing modules.dep\n", __FUNCTION__);
+    free(dep);
+    return NULL;
 }
 
 static int insmod(const char *path_name, const char *args)
@@ -225,7 +240,7 @@ static int insmod(const char *path_name, const char *args)
  * base    : a prefix to module path, it will NOT be affected by strip flag.
  * return  : 0 for success or nothing to do; non-zero when any error occurs.
  */
-static int insmod_s(char *dep[], const char *args, int strip, const char *base)
+int insmod_s(char *dep[], const char *args, int strip, const char *base)
 {
     char *name;
     char *path_name;
@@ -315,22 +330,20 @@ static int rmmod_s(char *dep[], unsigned int flags)
 /* look_up_dep() find and setup target module's dependency in modules.dep
  *
  * dep_file:    a pointer to module's dep file loaded in memory, its content
- *              will be CHANGED during parsing.
+ *              won't be changed, so it can be reused after parsing.
  *
  * return:      a pointer to an array which holds the dependency strings and
  *              terminated by a NULL pointer. Caller is responsible to free the
- *              array's memory.
+ *              array's memory and also the array items' memory.
  *
  *              non-zero in any other cases. Content of dep array is invalid.
  */
 static char ** look_up_dep(const char *module_name, void *dep_file)
 {
-
-    char *line;
-    char *saved_pos;
+    unsigned int line_size;
     char *start;
-    int ret = -1;
-    char **dep = NULL;
+    char *end;
+    char **dep;
 
     if (!dep_file || !module_name || *module_name == '\0')
         return NULL;
@@ -338,19 +351,15 @@ static char ** look_up_dep(const char *module_name, void *dep_file)
     start = (char *)dep_file;
 
     /* We expect modules.dep file has a new line char before EOF. */
-    while ((line = strtok_r(start, "\n", &saved_pos)) != NULL) {
-
-        start = NULL;
-
-        if (is_target_module(line, module_name)) {
-
-            dep = setup_dep(line);
-            /* job done */
-            break;
+    while ((end = strchr(start, '\n')) != NULL) {
+        line_size = (end - start);
+        if (is_target_module(start, module_name, line_size)) {
+            dep = setup_dep(start, line_size);
+            return dep;
         }
+        start = end + 1;
     }
-
-    return dep;
+    return NULL;
 }
 
 /* load_dep_file() load a dep file (usually it is modules.dep)
@@ -435,6 +444,109 @@ static void dump_black_list(struct listnode *black_list_head)
             ALOGE("DUMP BLACK: [%s]\n", blacklist->name);
     }
 }
+
+static int validate_module(const char *module_name, char *dep_file, struct listnode *extra_blacklist, char ***dep)
+{
+
+    *dep = look_up_dep(module_name, dep_file);
+
+    if (!(*dep)) {
+        ALOGE("%s: cannot find module's dependency info: [%s]\n", __FUNCTION__, module_name);
+        return MOD_DEP_NOT_FOUND;
+    }
+
+    if (is_dep_in_blacklist(*dep, extra_blacklist)) {
+        ALOGE("%s: a module is in caller's black list, stop further loading\n", __FUNCTION__);
+        free(*dep);
+        return MOD_IN_CALLER_BLACK;
+    }
+    return 0;
+}
+
+int get_module_dep(const char *module_name,
+        const char *dep_name,
+        int cached,
+        const char *blacklist,
+        char ***dep)
+{
+    static void *dep_file = NULL;
+
+    int i = 0;
+    struct listnode *alias_node;
+    struct module_alias_node *alias;
+    static list_declare(extra_blacklist);
+    static list_declare(alias_list);
+    list_declare(module_aliases);
+    int ret;
+
+    ret = MOD_UNKNOWN;
+
+    if (!module_name || *module_name == '\0') {
+        ALOGE("need valid module name\n");
+        return MOD_INVALID_NAME;
+    }
+
+    if (!cached || list_empty(&alias_list)) {
+        ret = parse_alias_to_list("/lib/modules/modules.alias", &alias_list);
+
+        if (ret) {
+            ALOGE("%s: parse alias error %d\n", __FUNCTION__, ret);
+            free_alias_list(&alias_list);
+            return MOD_BAD_ALIAS;
+        }
+    }
+
+    if (blacklist && *blacklist != '\0') {
+        if (!cached || list_empty(&extra_blacklist)) {
+            ret = parse_blacklist_to_list(blacklist, &extra_blacklist);
+            if (ret) {
+                ALOGI("%s: parse extra black list error %d\n", __FUNCTION__, ret);
+
+                /* A black list from caller is optional, but when caller does
+                 * give us a file and something's wrong with it, we will stop going further*/
+                ret = MOD_INVALID_CALLER_BLACK;
+                free_black_list(&extra_blacklist);
+                goto free_file;
+            }
+        }
+    }
+
+    if (!cached || dep_name || !dep_file)
+        dep_file = load_dep_file(dep_name);
+
+    if (!dep_file) {
+        ALOGE("cannot load dep file\n");
+        ret = MOD_BAD_DEP;
+
+        goto free_file;
+    }
+
+    /* check if module name is an alias. */
+    if (get_module_name_from_alias(module_name, &module_aliases, &alias_list) <= 0) {
+        ret = validate_module(module_name, dep_file, &extra_blacklist, dep);
+    } else {
+        list_for_each(alias_node, &module_aliases) {
+            alias = node_to_item(alias_node, struct module_alias_node, list);
+
+            ret = validate_module(alias->name, dep_file, &extra_blacklist, dep);
+
+            if (ret == 0) {
+                goto free_file;
+            }
+        }
+    }
+
+free_file:
+    if (!cached) {
+        free(dep_file);
+        dep_file = NULL;
+        free_alias_list(&alias_list);
+        free_black_list(&extra_blacklist);
+    }
+    free_alias_list(&module_aliases);
+    return ret;
+}
+
 /* insmod_by_dep() interface to outside,
  * refer to its description in probe_module.h
  */
@@ -445,94 +557,17 @@ int insmod_by_dep(const char *module_name,
         const char *base,
         const char *blacklist)
 {
-    void *dep_file = NULL;
-    char **dep = NULL;
-    char *mod_name = NULL;
-    int ret = MOD_UNKNOWN;
-    list_declare(base_blacklist);
-    list_declare(extra_blacklist);
-    list_declare(alias_list);
+    char **dep;
+    int ret;
 
-    if (!module_name || *module_name == '\0') {
-        ALOGE("need valid module name\n");
-
-        return MOD_INVALID_NAME;
-    }
-
-    ret = parse_alias_to_list("/lib/modules/modules.alias", &alias_list);
-
-    if (ret) {
-        ALOGE("%s: parse alias error %d\n", __FUNCTION__, ret);
-        ret = MOD_BAD_ALIAS;
-
-        goto free_file;
-    }
-
-    /* We allow no base blacklist. */
-    /* TODO: tell different cases between no caller black list and parsing failures. */
-    ret = parse_blacklist_to_list("/system/etc/modules.blacklist", &base_blacklist);
+    ret = get_module_dep(module_name, dep_name, 0, blacklist, &dep);
 
     if (ret)
-        ALOGI("%s: parse base black list error %d\n", __FUNCTION__, ret);
-
-    if (blacklist && *blacklist != '\0') {
-        ret = parse_blacklist_to_list(blacklist, &extra_blacklist);
-        if (ret) {
-            ALOGI("%s: parse extra black list error %d\n", __FUNCTION__, ret);
-
-            /* A black list from caller is optional, but when caller does
-             * give us a file and something's wrong with it, we will stop going further*/
-            ret = MOD_INVALID_CALLER_BLACK;
-
-            goto free_file;
-        }
-    }
-    dep_file = load_dep_file(dep_name);
-
-    if (!dep_file) {
-        ALOGE("cannot load dep file : %s\n", dep_name);
-        ret = MOD_BAD_DEP;
-
-        goto free_file;
-    }
-
-    /* check if module name is an alias. */
-    if (!get_module_name_from_alias(module_name, &mod_name, &alias_list))
-        module_name = mod_name;
-
-    dep = look_up_dep(module_name, dep_file);
-
-    if (!dep) {
-        ALOGE("%s: cannot find module's dependency info: [%s]\n", __FUNCTION__, module_name);
-        ret = MOD_DEP_NOT_FOUND;
-
-        goto free_file;
-    }
-
-    if (is_dep_in_blacklist(dep, &extra_blacklist)) {
-        ALOGE("%s: a module is in caller's black list, stop further loading\n", __FUNCTION__);
-        ret = MOD_IN_CALLER_BLACK;
-
-        goto free_file;
-    }
-
-    if (is_dep_in_blacklist(dep, &base_blacklist)) {
-        ALOGE("%s: a module is in system black list, stop further loading\n", __FUNCTION__);
-        ret = MOD_IN_BLACK;
-
-        goto free_file;
-    }
+        return ret;
 
     ret = insmod_s(dep, args, strip, base);
 
-free_file:
-    free(mod_name);
     free(dep);
-    free(dep_file);
-    free_alias_list(&alias_list);
-    free_black_list(&base_blacklist);
-    free_black_list(&extra_blacklist);
-
     return ret;
 }
 

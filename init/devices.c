@@ -109,14 +109,12 @@ struct platform_node {
     struct listnode list;
 };
 
-static list_declare(lmodalias);
 list_declare(ltriggers);
 
 static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(platform_names);
-static list_declare(deferred_module_loading_list);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
@@ -251,25 +249,25 @@ const char *get_mod_args(const char *mod_name)
     struct listnode *node = NULL;
     struct mod_arg_node *mod_arg_node = NULL;
     struct mod_args_ *mod_args = NULL;
-    char * real_mod_name = NULL;
-
-    if (list_empty(&lmodalias)) {
-        parse_alias_to_list("/lib/modules/modules.alias", &lmodalias);
-    }
-
-    if (!get_module_name_from_alias(mod_name, &real_mod_name, &lmodalias))
-        mod_name = real_mod_name;
+    int n1, n2;
 
     list_for_each(node, &lmod_args) {
         mod_arg_node = node_to_item(node, struct mod_arg_node, plist);
         mod_args = &mod_arg_node->mod_args;
+        n1 = strlen(mod_args->name);
+        if (strncmp(mod_name, mod_args->name, n1))
+            continue;
+        n2 = strlen(mod_name);
 
-
-        if (!strcmp(mod_name, mod_args->name)) {
+        if (n1 == n2)
             return mod_args->args;
+
+        /* mod_name contains .ko at the end */
+        if (n1 + 3 == n2) {
+            if (!strncmp(&mod_name[n1], ".ko", 3))
+                return mod_args->args;
         }
     }
-
     return "";
 }
 
@@ -740,31 +738,6 @@ static void handle_generic_device_event(struct uevent *uevent)
      handle_device(uevent, devpath, 0, links);
 }
 
-static void handle_deferred_module_loading()
-{
-    struct listnode *node = NULL;
-    struct listnode *next = NULL;
-    struct module_alias_node *alias = NULL;
-    int ret = -1;
-
-    list_for_each_safe(node, next, &deferred_module_loading_list) {
-        alias = node_to_item(node, struct module_alias_node, list);
-
-        if (alias && alias->pattern) {
-            INFO("deferred loading of module for %s\n", alias->pattern);
-            ret = insmod_by_dep(alias->pattern, get_mod_args(alias->pattern), NULL, 1, NULL,
-                    MODULES_BLKLST);
-            /* if it looks like file system where these files are is not
-             * ready, keep the module in defer list for retry. */
-            if (!(ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS))) {
-                free(alias->pattern);
-                list_remove(node);
-                free(alias);
-            }
-        }
-    }
-}
-
 int module_probe(const char *modalias)
 {
     return insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, NULL);    /* not to reuse ueventd's black list. */
@@ -775,28 +748,20 @@ static void handle_module_loading(const char *modalias)
     char *tmp;
     struct module_alias_node *node;
     int ret;
+    char **dep;
+    char *args;
 
     if (!modalias) return;
 
-    handle_deferred_module_loading();
+    ret = get_module_dep(modalias, NULL, 1, MODULES_BLKLST, &dep);
 
-    ret = insmod_by_dep(modalias, get_mod_args(modalias), NULL, 1, NULL, MODULES_BLKLST);
+    if (ret)
+        return;
 
-    if (ret & (MOD_BAD_DEP | MOD_INVALID_CALLER_BLACK | MOD_BAD_ALIAS)) {
-        node = calloc(1, sizeof(*node));
-        if (node) {
-            node->pattern = strdup(modalias);
-            if (!node->pattern) {
-                free(node);
-            } else {
-                list_add_tail(&deferred_module_loading_list, &node->list);
-                INFO("add to queue for deferred module loading: %s",
-                        node->pattern);
-            }
-        } else {
-            ERROR("failed to allocate memory to store device id for deferred module loading.\n");
-        }
-    }
+    args = get_mod_args(dep[0]);
+    INFO("Loading module %s, args %s\n", dep[0], args);
+    insmod_s(dep, args, 1, NULL);
+    free(dep);
 }
 
 static void handle_device_event(struct uevent *uevent)
@@ -988,8 +953,8 @@ static int handle_crda_event(struct uevent *uevent)
     case  0:
          /* Child related processing */
          if (execve(argv[0], argv, envp) ==  -1) {
-              ERROR("handle_crda_event - execve error\n");
-              return (-1);
+              ERROR("handle_crda_event - execve error: %s %s\n", argv[0], envp[0]);
+              exit(EXIT_FAILURE);
          }
          break;
     default:
