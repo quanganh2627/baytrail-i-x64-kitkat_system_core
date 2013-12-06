@@ -218,7 +218,8 @@ static int read_write_data(void *outdata, size_t outsz,
         }
 
 rw_done:
-        fclose(fp);
+        if(NULL != fp)
+            fclose(fp);
         return result;
     }
 }
