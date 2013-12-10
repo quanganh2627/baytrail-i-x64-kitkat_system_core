@@ -1077,9 +1077,7 @@ int main(int argc, char **argv)
             if (erase_first && needs_erase(pname)) {
                 fb_queue_erase(pname);
             }
-            data = load_file(fname, &sz);
-            if (data == 0) die("cannot load '%s': %s\n", fname, strerror(errno));
-            fb_queue_flash(pname, data, sz);
+            do_flash(&transport, pname, fname);
         } else if(!strcmp(*argv, "flash:raw")) {
             char *pname = argv[1];
             char *kname = argv[2];
