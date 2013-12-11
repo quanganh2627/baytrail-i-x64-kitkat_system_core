@@ -179,6 +179,7 @@ bool BatteryMonitor::update(void) {
     props.batteryStatus = BATTERY_STATUS_UNKNOWN;
     props.batteryHealth = BATTERY_HEALTH_UNKNOWN;
     props.batteryCurrentNow = INT_MIN;
+    props.batteryCurrentAvg = INT_MIN;
     props.batteryChargeCounter = INT_MIN;
 
     if (!mHealthdConfig->batteryPresentPath.isEmpty())
@@ -191,6 +192,9 @@ bool BatteryMonitor::update(void) {
 
     if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
         props.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
+
+    if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty())
+        props.batteryCurrentAvg = getIntField(mHealthdConfig->batteryCurrentAvgPath) / 1000;
 
     if (!mHealthdConfig->batteryChargeCounterPath.isEmpty())
         props.batteryChargeCounter = getIntField(mHealthdConfig->batteryChargeCounterPath);
@@ -252,10 +256,10 @@ bool BatteryMonitor::update(void) {
                  abs(props.batteryTemperature % 10), props.batteryHealth,
                  props.batteryStatus);
 
-        if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+        if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
             char b[20];
 
-            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow / 1000);
+            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentAvg);
             strlcat(dmesgline, b, sizeof(dmesgline));
         }
 
@@ -363,6 +367,14 @@ void BatteryMonitor::init(struct healthd_config *hc, bool nosvcmgr) {
                                       POWER_SUPPLY_SYSFS_PATH, name);
                     if (access(path, R_OK) == 0)
                         mHealthdConfig->batteryCurrentNowPath = path;
+                }
+
+                if (mHealthdConfig->batteryCurrentAvgPath.isEmpty()) {
+                    path.clear();
+                    path.appendFormat("%s/%s/current_avg",
+                                      POWER_SUPPLY_SYSFS_PATH, name);
+                    if (access(path, R_OK) == 0)
+                        mHealthdConfig->batteryCurrentAvgPath = path;
                 }
 
                 if (mHealthdConfig->batteryChargeCounterPath.isEmpty()) {
