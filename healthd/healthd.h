@@ -46,6 +46,7 @@
 //    batteryTemperaturePath: battery temperature (POWER_SUPPLY_PROP_TEMP)
 //    batteryTechnologyPath: battery technology (POWER_SUPPLY_PROP_TECHNOLOGY)
 //    batteryCurrentNowPath: battery current (POWER_SUPPLY_PROP_CURRENT_NOW)
+//    batteryCurrentAvgPath: battery current (POWER_SUPPLY_PROP_CURRENT_AVG)
 //    batteryChargeCounterPath: battery accumulated charge
 //                                         (POWER_SUPPLY_PROP_CHARGE_COUNTER)
 
@@ -61,6 +62,7 @@ struct healthd_config {
     android::String8 batteryTemperaturePath;
     android::String8 batteryTechnologyPath;
     android::String8 batteryCurrentNowPath;
+    android::String8 batteryCurrentAvgPath;
     android::String8 batteryChargeCounterPath;
 };
 
