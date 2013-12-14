@@ -98,7 +98,7 @@ symbol_table_t* load_symbol_table(const char *filename) {
             dynsym_idx = i;
         }
     }
-    if (dynsym_idx == -1 || sym_idx == -1) {
+    if (dynsym_idx == -1 && sym_idx == -1) {
         goto out_unmap;
     }
 

@@ -546,8 +546,8 @@ int main(int argc, char **argv)
             break;
 
             case 'r':
-                if (optarg == NULL) {
-                    android::g_logRotateSizeKBytes
+                if (optarg == NULL) {                
+                    android::g_logRotateSizeKBytes 
                                 = DEFAULT_LOG_ROTATE_SIZE_KBYTES;
                 } else {
                     long logRotateSize;

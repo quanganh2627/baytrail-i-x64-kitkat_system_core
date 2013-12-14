@@ -12,25 +12,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * This file was modified by Dolby Laboratories, Inc. The portions of the
- * code that are surrounded by "DOLBY..." are copyrighted and
- * licensed separately, as follows:
- *
- *  (C) 2011-2013 Dolby Laboratories, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  */
 
 #include <stdio.h>
@@ -100,10 +81,7 @@ struct {
     { "sys.powerctl",     AID_SHELL,    0 },
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
-    { "wpa_supplicant.",  AID_WIFI,     0 },
-    { "gps.",             AID_GPS,      0 },
     { "bluetooth.",       AID_BLUETOOTH,   0 },
-    { "nfc.",             AID_NFC,      0 },
     { "dhcp.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
     { "debug.",           AID_SYSTEM,   0 },
@@ -114,19 +92,8 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
-    { "persist.gps.",      AID_GPS,      0 },
     { "persist.service.bdroid.", AID_BLUETOOTH,   0 },
-    { "media.",           AID_MEDIA,    0 },
     { "selinux."         , AID_SYSTEM,   0 },
-    { "AudioComms.",       AID_MEDIA,    0 },
-    { "audiocomms.",       AID_MEDIA,    0 },
-#ifdef DOLBY_UDC
-    { "dolby.audio",      AID_MEDIA,    0 },
-#endif // DOLBY_UDC
-#ifdef DOLBY_DAP
-    // used for setting Dolby specific properties
-    { "dolby.", AID_SYSTEM,   0 },
-#endif // DOLBY_DAP
     { NULL, 0, 0 }
 };
 
@@ -628,7 +595,6 @@ void start_property_service(void)
 
     listen(fd, 8);
     property_set_fd = fd;
-    load_properties_from_file(PROP_PATH_UEVENTD);
 }
 
 int get_property_set_fd()

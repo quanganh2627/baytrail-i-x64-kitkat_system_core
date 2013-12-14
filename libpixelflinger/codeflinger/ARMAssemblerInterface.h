@@ -1,4 +1,4 @@
-/* libs/pixelflinger/codeflinger/arm/ARMAssemblerInterface.h
+/* libs/pixelflinger/codeflinger/ARMAssemblerInterface.h
 **
 ** Copyright 2006, The Android Open Source Project
 **

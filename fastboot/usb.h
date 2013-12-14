@@ -59,9 +59,9 @@ struct usb_ifc_info
 typedef int (*ifc_match_func)(usb_ifc_info *ifc);
 
 usb_handle *usb_open(ifc_match_func callback);
-int usb_close(void *userdata);
-int usb_read(void *userdata, void *_data, int len);
-int usb_write(void *userdata, const void *_data, int len);
+int usb_close(usb_handle *h);
+int usb_read(usb_handle *h, void *_data, int len);
+int usb_write(usb_handle *h, const void *_data, int len);
 
 
 #endif

@@ -365,7 +365,7 @@ ssize_t utf8_length(const char *src)
     const char *cur = src;
     size_t ret = 0;
     while (*cur != '\0') {
-        const unsigned char first_char = *cur++;
+        const char first_char = *cur++;
         if ((first_char & 0x80) == 0) { // ASCII
             ret += 1;
             continue;

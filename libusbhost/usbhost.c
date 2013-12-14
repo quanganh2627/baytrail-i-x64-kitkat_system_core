@@ -226,7 +226,6 @@ int usb_host_read_event(struct usb_host_context *context)
     char event_buf[512];
     char path[100];
     int i, ret, done = 0;
-    int devdone = 0;
     int offset = 0;
     int wd;
 
@@ -235,7 +234,6 @@ int usb_host_read_event(struct usb_host_context *context)
         while (offset < ret && !done) {
             event = (struct inotify_event*)&event_buf[offset];
             done = 0;
-            devdone = 0;
             wd = event->wd;
             if (wd == context->wdd) {
                 if ((event->mask & IN_CREATE) && !strcmp(event->name, "bus")) {
@@ -278,15 +276,15 @@ int usb_host_read_event(struct usb_host_context *context)
                     }
                 }
             } else {
-                for (i = 1; (i < MAX_USBFS_WD_COUNT) && !devdone; i++) {
+                for (i = 1; (i < MAX_USBFS_WD_COUNT) && !done; i++) {
                     if (wd == context->wds[i]) {
                         snprintf(path, sizeof(path), USB_FS_DIR "/%03d/%s", i, event->name);
                         if (event->mask == IN_CREATE) {
                             D("new device %s\n", path);
-                            devdone = context->cb_added(path, context->data);
+                            done = context->cb_added(path, context->data);
                         } else if (event->mask == IN_DELETE) {
                             D("gone device %s\n", path);
-                            devdone = context->cb_removed(path, context->data);
+                            done = context->cb_removed(path, context->data);
                         }
                     }
                 }

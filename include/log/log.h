@@ -67,9 +67,6 @@ extern "C" {
 #ifndef LOG_TAG
 #define LOG_TAG NULL
 #endif
-//////
-#define LOGD ALOGD
-#define LOGD_IF ALOGD_IF
 
 // ---------------------------------------------------------------------
 
@@ -83,8 +80,6 @@ extern "C" {
 #define ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #endif
 #endif
-/////
-#define LOGV ALOGV
 
 #define CONDITION(cond)     (__builtin_expect((cond)!=0, 0))
 
@@ -98,8 +93,6 @@ extern "C" {
     : (void)0 )
 #endif
 #endif
-//////
-#define LOGV_IF ALOGV_IF
 
 /*
  * Simplified macro to send a debug log message using the current LOG_TAG.
@@ -114,9 +107,6 @@ extern "C" {
     ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-//////
-#define LOGD ALOGD
-#define LOGD_IF ALOGD_IF
 
 /*
  * Simplified macro to send an info log message using the current LOG_TAG.
@@ -131,9 +121,6 @@ extern "C" {
     ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-///////
-#define LOGI ALOGI
-#define LOGI_IF ALOGI_IF
 
 /*
  * Simplified macro to send a warning log message using the current LOG_TAG.
@@ -148,9 +135,6 @@ extern "C" {
     ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-//////
-#define LOGW ALOGW
-#define LOGW_IF ALOGW_IF
 
 /*
  * Simplified macro to send an error log message using the current LOG_TAG.
@@ -165,9 +149,6 @@ extern "C" {
     ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
-///////
-#define LOGE ALOGE
-#define LOGE_IF ALOGE_IF
 
 // ---------------------------------------------------------------------
 
@@ -182,8 +163,6 @@ extern "C" {
 #define IF_ALOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
 #endif
 #endif
-/////
-#define IF_LOGV IF_LOGV
 
 /*
  * Conditional based on whether the current LOG_TAG is enabled at
@@ -192,8 +171,6 @@ extern "C" {
 #ifndef IF_ALOGD
 #define IF_ALOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
 #endif
-/////
-#define IF_LOGD IF_ALOGD
 
 /*
  * Conditional based on whether the current LOG_TAG is enabled at
@@ -202,8 +179,6 @@ extern "C" {
 #ifndef IF_ALOGI
 #define IF_ALOGI() IF_ALOG(LOG_INFO, LOG_TAG)
 #endif
-////
-#define IF_LOGI IF_ALOGI
 
 /*
  * Conditional based on whether the current LOG_TAG is enabled at
@@ -212,8 +187,6 @@ extern "C" {
 #ifndef IF_ALOGW
 #define IF_ALOGW() IF_ALOG(LOG_WARN, LOG_TAG)
 #endif
-/////
-#define IF_LOGW IF_ALOGW
 
 /*
  * Conditional based on whether the current LOG_TAG is enabled at
@@ -222,8 +195,7 @@ extern "C" {
 #ifndef IF_ALOGE
 #define IF_ALOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
 #endif
-////
-#define IF_LOGE IF_ALOGE
+
 
 // ---------------------------------------------------------------------
 

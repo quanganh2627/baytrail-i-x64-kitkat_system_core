@@ -310,7 +310,6 @@ enum {
     AUDIO_DEVICE_OUT_USB_DEVICE                = 0x4000,
     AUDIO_DEVICE_OUT_REMOTE_SUBMIX             = 0x8000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
-    AUDIO_DEVICE_OUT_WIDI                      = 0x1000000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
                                  AUDIO_DEVICE_OUT_WIRED_HEADSET |
@@ -368,8 +367,6 @@ enum {
                                AUDIO_DEVICE_IN_USB_DEVICE |
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
-    // device supporting remote background playback in addition to foreground playback
-    AUDIO_DEVICE_OUT_REMOTE_BGM_SINK = AUDIO_DEVICE_OUT_WIDI|AUDIO_DEVICE_OUT_REMOTE_SUBMIX,
 };
 
 typedef uint32_t audio_devices_t;
@@ -397,8 +394,7 @@ typedef enum {
     AUDIO_OUTPUT_FLAG_DEEP_BUFFER = 0x8, // use deep audio buffers
     AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD = 0x10,  // offload playback of compressed
                                                 // streams to hardware codec
-    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20, // use non-blocking write
-    AUDIO_OUTPUT_FLAG_REMOTE_BGM = 0x40 // used for remote background playback
+    AUDIO_OUTPUT_FLAG_NON_BLOCKING = 0x20 // use non-blocking write
 } audio_output_flags_t;
 
 /* The audio input flags are analogous to audio output flags.
