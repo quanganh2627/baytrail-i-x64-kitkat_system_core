@@ -75,9 +75,10 @@ void restart_root_service(int fd, void *cookie)
             return;
         }
 
-        property_set("service.adb.root", "1");
         snprintf(buf, sizeof(buf), "restarting adbd as root\n");
         writex(fd, buf, strlen(buf));
+        sleep(1);
+        property_set("service.adb.root", "1");
         adb_close(fd);
     }
 }
@@ -105,6 +106,15 @@ void restart_tcp_service(int fd, void *cookie)
 void restart_usb_service(int fd, void *cookie)
 {
     char buf[100];
+    char value[PROPERTY_VALUE_MAX];
+
+    property_get("service.adb.tcp.port", value, "0");
+    if (!strcmp(value, "0")) {
+        snprintf(buf, sizeof(buf), "already in USB mode\n");
+        writex(fd, buf, strlen(buf));
+        adb_close(fd);
+        return;
+    }
 
     property_set("service.adb.tcp.port", "0");
     snprintf(buf, sizeof(buf), "restarting in USB mode\n");
@@ -144,7 +154,11 @@ void reboot_service(int fd, void *arg)
     if (ret < 0) {
         snprintf(buf, sizeof(buf), "reboot failed: %d\n", ret);
         writex(fd, buf, strlen(buf));
+        goto cleanup;
     }
+    // Don't return early. Give the reboot command time to take effect
+    // to avoid messing up scripts which do "adb reboot && adb wait-for-device"
+    while(1) { pause(); }
 cleanup:
     free(arg);
     adb_close(fd);

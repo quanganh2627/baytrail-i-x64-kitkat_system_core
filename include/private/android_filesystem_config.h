@@ -77,6 +77,13 @@
 #define AID_SDCARD_AV     1034  /* external storage audio/video access */
 #define AID_SDCARD_ALL    1035  /* access all users external storage */
 
+/* Non-AOSP user ID:
+ * As the system partition can be updated over the air, AID numbers should never be changed.
+ * That's why it's better to pick-up the highest possible number for non-aosp aid:
+ * This will allow the  AOSP user list to grow in the future without impacting non-asop aid.
+ */
+#define AID_SMARTCARD     1999  /* smart card subsystem */
+
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
 #define AID_DIAG          2002  /* access to diagnostic resources */
@@ -91,6 +98,10 @@
 #define AID_NET_BW_STATS  3006  /* read bandwidth statistics */
 #define AID_NET_BW_ACCT   3007  /* change bandwidth statistics accounting */
 #define AID_NET_BT_STACK  3008  /* bluetooth: access config files */
+#define AID_SEP_GROUP     3700  /* This is for the security processor */
+/* The range AID_CONT_FIRST - AID_CONT_LAST is reserved for containers */
+#define AID_CONT_FIRST    3701
+#define AID_CONT_LAST     3704
 
 #define AID_MISC          9998  /* access to misc storage */
 #define AID_NOBODY        9999
@@ -166,7 +177,15 @@ static const struct android_id_info android_ids[] = {
     { "net_bt_stack",  AID_NET_BT_STACK, },
 
     { "misc",          AID_MISC, },
+    { "security",  AID_SEP_GROUP },
+    { "container1", AID_CONT_FIRST, },
+    { "container2", AID_CONT_FIRST + 1, },
+    { "container3", AID_CONT_FIRST + 2, },
+    { "container4", AID_CONT_FIRST + 3, },
     { "nobody",        AID_NOBODY, },
+
+    // Non-Aosp user id
+    { "smartcard",     AID_SMARTCARD, },
 };
 
 #define android_id_count \

@@ -19,10 +19,19 @@
 
 #include <sys/stat.h>
 
+#define MAX_DEV_PATH 512
+
 extern void handle_device_fd();
+extern void handle_modalias_triggers(const char* modalias);
 extern void device_init(void);
+extern int module_probe(const char *alias);
 extern int add_dev_perms(const char *name, const char *attr,
                          mode_t perm, unsigned int uid,
-                         unsigned int gid, unsigned short prefix);
+                         unsigned int gid, unsigned short wildcard);
+extern int add_mod_args(int nargs, const char *mod_name, char *args[]);
+extern int add_inet_args(char *net_link, char *if_name, char *target_name);
+extern int add_dev_args(unsigned int vid, unsigned int pid, char *dev_name, char *target_name);
+
 int get_device_fd();
+void coldboot(const char *path);
 #endif	/* _INIT_DEVICES_H */
