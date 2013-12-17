@@ -72,11 +72,19 @@ typedef enum {
                                           /*  play the mix captured by this audio source.      */
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
-    AUDIO_SOURCE_HOTWORD             = 1999, /* A low-priority, preemptible audio source for
+
+    AUDIO_SOURCE_LOW_PRIO_START      = 1999,
+    AUDIO_SOURCE_HOTWORD             = AUDIO_SOURCE_LOW_PRIO_START,
+                                             /* A low-priority, preemptible audio source for
                                                 for background software hotword detection.
                                                 Same tuning as AUDIO_SOURCE_VOICE_RECOGNITION.
                                                 Used only internally to the framework. Not exposed
                                                 at the audio HAL. */
+    AUDIO_SOURCE_LPAL                = 2000, /* A low-priority, preemptible audio source to handle
+                                                Low Power Voice Trigger / Always Listening feature
+                                                No data are returned to upper layers */
+    AUDIO_SOURCE_LOW_PRIO_END        = AUDIO_SOURCE_LPAL,
+
 } audio_source_t;
 
 /* special audio session values
