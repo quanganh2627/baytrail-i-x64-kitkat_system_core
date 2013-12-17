@@ -570,12 +570,52 @@ int do_mount_all(int nargs, char **args)
 
 int do_swapon_all(int nargs, char **args)
 {
+    pid_t pid;
+    int ret = -1;
+    int child_ret = -1;
+    int status;
+    const char *prop;
     struct fstab *fstab;
-    int ret;
+    char prop_val[PROP_VALUE_MAX];
 
-    fstab = fs_mgr_read_fstab(args[1]);
-    ret = fs_mgr_swapon_all(fstab);
-    fs_mgr_free_fstab(fstab);
+    if (nargs != 2) {
+        return -1;
+    }
+
+    /*
+     * Call fs_mgr_swapon_all() to mount all filesystems.  We fork(2) and
+     * do the call in the child to provide protection to the main init
+     * process if anything goes wrong (crash or memory leak), and wait for
+     * the child to finish in the parent.
+     */
+    pid = fork();
+    if (pid > 0) {
+        /* Parent.  Wait for the child to return */
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            ret = WEXITSTATUS(status);
+        } else {
+            ret = -1;
+        }
+    } else if (pid == 0) {
+        /* child, call fs_mgr_swapon_all() */
+        klog_set_level(6);  /* So we can see what fs_mgr_swapon_all() does */
+        ret = expand_props(prop_val, args[1], sizeof(prop_val));
+        if (ret) {
+            ERROR("cannot expand '%s' while assigning to '%s'\n", args[1], prop_val);
+            return -1;
+        }
+        fstab = fs_mgr_read_fstab(prop_val);
+        child_ret = fs_mgr_swapon_all(fstab);
+        fs_mgr_free_fstab(fstab);
+        if (child_ret == -1) {
+            ERROR("fs_mgr_swapon_all returned an error\n");
+        }
+        exit(child_ret);
+    } else {
+        /* fork failed, return an error */
+        return -1;
+    }
 
     return ret;
 }
