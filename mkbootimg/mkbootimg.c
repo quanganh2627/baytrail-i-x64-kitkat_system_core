@@ -189,7 +189,7 @@ static int read_write_data(void *outdata, size_t outsz,
         if(!fp) {
             perror("fdopen");
             result = 1;
-            goto rw_done;
+            goto exit;
         }
         remaining = insz;
         pos = indata;
@@ -219,6 +219,7 @@ static int read_write_data(void *outdata, size_t outsz,
 
 rw_done:
         fclose(fp);
+exit:
         return result;
     }
 }

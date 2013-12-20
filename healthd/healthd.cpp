@@ -49,6 +49,7 @@ static struct healthd_config healthd_config = {
     .batteryTemperaturePath = String8(String8::kEmptyString),
     .batteryTechnologyPath = String8(String8::kEmptyString),
     .batteryCurrentNowPath = String8(String8::kEmptyString),
+    .batteryCurrentAvgPath = String8(String8::kEmptyString),
     .batteryChargeCounterPath = String8(String8::kEmptyString),
 };
 
@@ -68,6 +69,8 @@ static int wakealarm_wake_interval = DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
 static BatteryMonitor* gBatteryMonitor;
 
 static bool nosvcmgr;
+static bool nopolling;
+static bool nowakeup;
 
 static void wakealarm_set_interval(int interval) {
     struct itimerspec itval;
@@ -199,7 +202,9 @@ static void healthd_mainloop(void) {
     }
 
     if (uevent_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
+        ev.events = EPOLLIN;
+        if (!nowakeup)
+            ev.events |= EPOLLWAKEUP;
         ev.data.ptr = (void *)uevent_event;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, uevent_fd, &ev) == -1)
             KLOG_ERROR(LOG_TAG,
@@ -210,7 +215,9 @@ static void healthd_mainloop(void) {
     }
 
     if (wakealarm_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
+        ev.events = EPOLLIN;
+        if (!nowakeup)
+            ev.events |= EPOLLWAKEUP;
         ev.data.ptr = (void *)wakealarm_event;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, wakealarm_fd, &ev) == -1)
             KLOG_ERROR(LOG_TAG,
@@ -221,7 +228,9 @@ static void healthd_mainloop(void) {
    }
 
     if (binder_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
+        ev.events = EPOLLIN;
+        if (!nowakeup)
+            ev.events |= EPOLLWAKEUP;
         ev.data.ptr= (void *)binder_event;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, binder_fd, &ev) == -1)
             KLOG_ERROR(LOG_TAG,
@@ -262,15 +271,26 @@ int main(int argc, char **argv) {
 
     klog_set_level(KLOG_LEVEL);
 
-    while ((ch = getopt(argc, argv, "n")) != -1) {
+    while ((ch = getopt(argc, argv, "npw")) != -1) {
         switch (ch) {
         case 'n':
             nosvcmgr = true;
+            break;
+        case 'p':
+            nopolling = true;
+            break;
+        case 'w':
+            nowakeup = true;
             break;
         case '?':
         default:
             KLOG_WARNING(LOG_TAG, "Unrecognized healthd option: %c\n", ch);
         }
+    }
+
+    if (nopolling == true) {
+        healthd_config.periodic_chores_interval_fast = -1;
+        healthd_config.periodic_chores_interval_slow = -1;
     }
 
     healthd_board_init(&healthd_config);
