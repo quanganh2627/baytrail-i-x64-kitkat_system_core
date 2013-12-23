@@ -199,7 +199,12 @@ static void healthd_mainloop(void) {
     }
 
     if (uevent_fd >= 0) {
-        ev.events = EPOLLIN | EPOLLWAKEUP;
+        // Cannot set EPOLLWAKEUP for this listener as this prevents
+        // system suspending via autosleep.
+        // For example, when CPU 1 is offline, a 'machinecheck1' uevent
+        // will be fired. Since it acts as an active wakeup source,
+        // this causes autosleep to fail.
+        ev.events = EPOLLIN;
         ev.data.ptr = (void *)uevent_event;
         if (epoll_ctl(epollfd, EPOLL_CTL_ADD, uevent_fd, &ev) == -1)
             KLOG_ERROR(LOG_TAG,
