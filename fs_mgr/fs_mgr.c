@@ -337,14 +337,27 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
 
     if (!entries) {
         ERROR("No entries found in fstab\n");
-        return 0;
+        goto out_close;
     }
 
     /* Allocate and init the fstab structure */
     fstab = calloc(1, sizeof(struct fstab));
+    if (!fstab) {
+        ERROR("Couldn't allocate fstab\n");
+        goto out_close;
+    }
     fstab->num_entries = entries;
-    fstab->fstab_filename = strdup(fstab_path);
     fstab->recs = calloc(fstab->num_entries, sizeof(struct fstab_rec));
+    if (!fstab->recs) {
+        ERROR("Couldn't allocate %d fstab records\n", fstab->num_entries);
+        free(fstab);
+        goto out_close;
+    }
+    fstab->fstab_filename = strdup(fstab_path);
+    if (!fstab->fstab_filename) {
+        ERROR("Couldn't allocate fstab_filename\n");
+        goto out_free;
+    }
 
     fseek(fstab_file, 0, SEEK_SET);
 
@@ -369,32 +382,44 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
          * error and quit.  This can happen in the unlikely case the file changes
          * between the two reads.
          */
-        if (cnt >= entries) {
+        if (cnt >= fstab->num_entries) {
             ERROR("Tried to process more entries than counted\n");
             break;
         }
 
         if (!(p = strtok_r(line, delim, &save_ptr))) {
             ERROR("Error parsing mount source\n");
-            return 0;
+            goto out_free;
         }
         fstab->recs[cnt].blk_device = strdup(p);
+        if (!fstab->recs[cnt].blk_device) {
+            ERROR("memory allocation error");
+            goto out_free;
+        }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing mount_point\n");
-            return 0;
+            goto out_free;
         }
         fstab->recs[cnt].mount_point = strdup(p);
+        if (!fstab->recs[cnt].mount_point) {
+            ERROR("memory allocation error");
+            goto out_free;
+        }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing fs_type\n");
-            return 0;
+            goto out_free;
         }
         fstab->recs[cnt].fs_type = strdup(p);
+        if (!fstab->recs[cnt].fs_type) {
+            ERROR("memory allocation error");
+            goto out_free;
+        }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing mount_flags\n");
-            return 0;
+            goto out_free;
         }
         tmp_fs_options[0] = '\0';
         fstab->recs[cnt].flags = parse_flags(p, mount_flags, NULL,
@@ -403,13 +428,17 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         /* fs_options are optional */
         if (tmp_fs_options[0]) {
             fstab->recs[cnt].fs_options = strdup(tmp_fs_options);
+            if (!fstab->recs[cnt].fs_options) {
+                ERROR("memory allocation error");
+                goto out_free;
+            }
         } else {
             fstab->recs[cnt].fs_options = NULL;
         }
 
         if (!(p = strtok_r(NULL, delim, &save_ptr))) {
             ERROR("Error parsing fs_mgr_options\n");
-            return 0;
+            goto out_free;
         }
         fstab->recs[cnt].fs_mgr_flags = parse_flags(p, fs_mgr_flags,
                                                     &flag_vals, NULL, 0);
@@ -424,6 +453,12 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
     fclose(fstab_file);
 
     return fstab;
+
+out_free:
+    fs_mgr_free_fstab(fstab);
+out_close:
+    fclose(fstab_file);
+    return NULL;
 }
 
 void fs_mgr_free_fstab(struct fstab *fstab)
