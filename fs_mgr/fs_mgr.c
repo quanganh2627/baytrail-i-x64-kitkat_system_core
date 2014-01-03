@@ -329,15 +329,10 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         while (isspace(*p)) {
             p++;
         }
-        /* ignore comments or empty lines */
-        if (*p == '#' || *p == '\0')
+        /* ignore comments, includes, or empty lines */
+        if (*p == '#' || *p == '\0' || (!strncmp(p, "include", 7) && p[7] && isspace(p[7])))
             continue;
         entries++;
-    }
-
-    if (!entries) {
-        ERROR("No entries found in fstab\n");
-        goto out_close;
     }
 
     /* Allocate and init the fstab structure */
@@ -377,6 +372,43 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         /* ignore comments or empty lines */
         if (*p == '#' || *p == '\0')
             continue;
+
+        if (!strncmp(p, "include", 7) && p[7] && isspace(p[7])) {
+            struct fstab *ifs;
+            struct fstab_rec *newrecs;
+            int to_zero;
+
+            p += 8;
+            while (isspace(*p))
+                p++;
+
+            ifs =  fs_mgr_read_fstab(p);
+            if (!ifs) {
+                ERROR("Unable to include fstab file %s, skipping\n", p);
+                continue;
+            }
+            newrecs = realloc(fstab->recs, (ifs->num_entries + fstab->num_entries)
+                    * sizeof(struct fstab_rec));
+            if (!newrecs) {
+                ERROR("Couldn't expand fstab entries\n");
+                fs_mgr_free_fstab(ifs);
+                continue;
+            }
+            INFO("got %d fstab entries from included file %s\n", ifs->num_entries, p);
+            to_zero = fstab->num_entries - cnt;
+            memset(&newrecs[cnt + ifs->num_entries], 0,
+                    to_zero * sizeof(struct fstab_rec));
+            memcpy(&newrecs[cnt], ifs->recs,
+                    ifs->num_entries * sizeof(struct fstab_rec));
+
+            fstab->num_entries += ifs->num_entries;
+            cnt += ifs->num_entries;
+            fstab->recs = newrecs;
+            free(ifs->recs);
+            free(ifs->fstab_filename);
+            free(ifs);
+            continue;
+        }
 
         /* If a non-comment entry is greater than the size we allocated, give an
          * error and quit.  This can happen in the unlikely case the file changes
@@ -450,6 +482,11 @@ struct fstab *fs_mgr_read_fstab(const char *fstab_path)
         fstab->recs[cnt].zram_size = flag_vals.zram_size;
         cnt++;
     }
+
+    if (!fstab->num_entries) {
+        ERROR("No entries found in fstab\n");
+        goto out_free;
+    }
     fclose(fstab_file);
 
     return fstab;
@@ -458,6 +495,7 @@ out_free:
     fs_mgr_free_fstab(fstab);
 out_close:
     fclose(fstab_file);
+    ERROR("Failure reading %s\n", fstab_path);
     return NULL;
 }
 
