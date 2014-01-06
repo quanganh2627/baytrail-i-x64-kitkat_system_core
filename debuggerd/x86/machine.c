@@ -50,7 +50,7 @@ static void dump_specific_ps_info(log_t* log, pid_t tid, uintptr_t addr, bool at
     }
 
     void* handle = dlopen(propertyBuffer, RTLD_LAZY);
-    if (!handle) {
+    if (handle == NULL) {
         _LOG(log, !at_fault, "\ndump_specific_ps_info: can't open library %s\n", propertyBuffer);
         return; // no library
     }
@@ -58,9 +58,10 @@ static void dump_specific_ps_info(log_t* log, pid_t tid, uintptr_t addr, bool at
     // reset errors
     dlerror();
     dump_ps_data_t dump_ps_data = (dump_ps_data_t) dlsym(handle, "dump_ps_data");
-    const char *dlsym_error = dlerror();
-    if (dlsym_error) {
-        _LOG(log, !at_fault, "\ndump_specific_ps_info: no required method in library\n");
+    if (dump_ps_data == NULL) {
+        const char *dlsym_error = dlerror();
+        _LOG(log, !at_fault, "\ndump_specific_ps_info: no required method in library (%s)\n",
+                dlsym_error == NULL ? "unknown reason" : dlsym_error);
         dlclose(handle);
         return;
     }
