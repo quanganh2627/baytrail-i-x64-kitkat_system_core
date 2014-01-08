@@ -619,6 +619,8 @@ int fb_execute_queue(transport_t *transport)
         }
     }
 
+    if (transport)
+        transport->close(transport->userdata);
     fprintf(stderr,"finished. total time: %.3fs\n", (now() - start));
     return status;
 }

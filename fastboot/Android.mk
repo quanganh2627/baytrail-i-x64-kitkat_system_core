@@ -18,12 +18,12 @@ include $(CLEAR_VARS)
 
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils
-LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c tcp.c
+LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c
 LOCAL_MODULE := fastboot
 LOCAL_MODULE_TAGS := debug
 
 ifeq ($(HOST_OS),linux)
-  LOCAL_SRC_FILES += usb_linux.c util_linux.c
+  LOCAL_SRC_FILES += usb_linux.c util_linux.c tcp.c
 endif
 
 ifeq ($(HOST_OS),darwin)
@@ -33,16 +33,16 @@ ifeq ($(HOST_OS),darwin)
 endif
 
 ifeq ($(HOST_OS),windows)
-  LOCAL_SRC_FILES += usb_windows.c util_windows.c
+  LOCAL_SRC_FILES += usb_windows.c util_windows.c tcp_windows.c
   EXTRA_STATIC_LIBS := AdbWinApi
   ifneq ($(strip $(USE_CYGWIN)),)
     # Pure cygwin case
-    LOCAL_LDLIBS += -lpthread
+    LOCAL_LDLIBS += -lpthread -lgdi32
     LOCAL_C_INCLUDES += /usr/include/w32api/ddk
   endif
   ifneq ($(strip $(USE_MINGW)),)
     # MinGW under Linux case
-    LOCAL_LDLIBS += -lws2_32
+    LOCAL_LDLIBS += -lws2_32 -lgdi32
     USE_SYSDEPS_WIN32 := 1
     LOCAL_C_INCLUDES += /usr/i586-mingw32msvc/include/ddk
   endif
