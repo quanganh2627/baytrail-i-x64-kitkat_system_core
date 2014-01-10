@@ -13,6 +13,8 @@ LOCAL_SRC_FILES:= \
 	utility.c \
 	$(TARGET_ARCH)/machine.c
 
+LOCAL_LDLIBS += -ldl
+
 LOCAL_CFLAGS := -Wall -Wno-unused-parameter -std=gnu99
 LOCAL_MODULE := debuggerd
 
@@ -28,7 +30,8 @@ LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libc \
 	libcorkscrew \
-	libselinux
+	libselinux \
+	libdl
 
 include $(BUILD_EXECUTABLE)
 
