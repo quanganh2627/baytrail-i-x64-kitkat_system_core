@@ -16,9 +16,6 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-FASTBOOT_SHA1 := $(shell cd $(LOCAL_PATH); git log -n1 --pretty=format:%H)
-LOCAL_CFLAGS += -DFASTBOOT_SHA1='"$(FASTBOOT_SHA1)"'
-
 LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
   $(LOCAL_PATH)/../../extras/ext4_utils
 LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c tcp.c
