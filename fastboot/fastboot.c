@@ -303,11 +303,6 @@ void list_devices(void) {
     tcp_list(host);
 }
 
-void version(void)
-{
-    fprintf(stdout, "Fastboot SHA1 %s\n", FASTBOOT_SHA1);
-}
-
 void usage(void)
 {
     fprintf(stderr,
@@ -328,7 +323,6 @@ void usage(void)
             "  reboot                                   reboot device normally\n"
             "  reboot-bootloader                        reboot device into bootloader\n"
             "  help                                     show this help message\n"
-            "  version                                  show the version (SHA1)\n"
             "\n"
             "options:\n"
             "  -w                                       erase userdata and cache (and format\n"
@@ -918,7 +912,6 @@ int main(int argc, char **argv)
         {"page_size", required_argument, 0, 'n'},
         {"ramdisk_offset", required_argument, 0, 'r'},
         {"help", 0, 0, 'h'},
-        {"version", 0, 0, 'v'},
         {0, 0, 0, 0}
     };
 
@@ -926,7 +919,7 @@ int main(int argc, char **argv)
 
     while (1) {
         int option_index = 0;
-        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:hvt:", longopts, NULL);
+        c = getopt_long(argc, argv, "wub:k:n:r:s:S:lp:c:i:m:ht:", longopts, NULL);
         if (c < 0) {
             break;
         }
@@ -941,9 +934,6 @@ int main(int argc, char **argv)
         case 'h':
             usage();
             return 1;
-        case 'v':
-            version();
-            return 0;
         case 'i': {
                 char *endptr = NULL;
                 unsigned long val;
@@ -1011,11 +1001,6 @@ int main(int argc, char **argv)
 
     if (argc > 0 && !strcmp(*argv, "help")) {
         usage();
-        return 0;
-    }
-
-    if (argc > 0 && !strcmp(*argv, "version")) {
-        version();
         return 0;
     }
 
