@@ -658,6 +658,103 @@ int socket_loopback_server(int port, int type)
     return _fh_to_int(f);
 }
 
+void sleep_seconds(int seconds)
+{
+    Sleep(seconds * 1000);
+}
+
+int socket_network_client_timeout(const char *host, int port, int type, int timeout)
+{
+    FH  f = _fh_alloc(&_fh_socket_class);
+    struct hostent *hp;
+    struct sockaddr_in addr;
+    SOCKET s;
+    u_long arg = 0;
+    int val = 0, error = 0, len = sizeof(error);
+    fd_set rset, wset;
+    const struct timeval ts = {timeout, 0};
+
+    if (!f)
+        return -1;
+
+    if (!_winsock_init)
+        _init_winsock();
+
+    hp = gethostbyname(host);
+    if (hp == 0) {
+        _fh_close(f);
+        return -1;
+    }
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = hp->h_addrtype;
+    addr.sin_port = htons(port);
+    memcpy(&addr.sin_addr, hp->h_addr, hp->h_length);
+
+    s = socket(hp->h_addrtype, type, 0);
+    if (s == INVALID_SOCKET) {
+        _fh_close(f);
+        return -1;
+    }
+
+    f->fh_socket = s;
+    arg = 1;
+    if (ioctlsocket(s, FIONBIO, &arg)) {
+        _fh_close(f);
+        return -1;
+    }
+
+    if ((val = connect(s, (struct sockaddr *) &addr, sizeof(addr))) == SOCKET_ERROR) {
+        if (WSAGetLastError() != WSAEWOULDBLOCK) {
+            _fh_close(f);
+            return -1;
+        }
+    }
+
+    if (val == 0) {
+        goto done;
+    }
+
+    FD_ZERO(&rset);
+    FD_SET(s, &rset);
+    wset = rset;
+
+    if ((val = select(arg, &rset, &wset, NULL, (timeout) ? &ts : NULL)) == SOCKET_ERROR) {
+        _fh_close(f);
+        return -1;
+    }
+
+    if (val == 0) {
+        errno = WSAETIMEDOUT;
+        _fh_close(f);
+        return -1;
+    }
+
+    if (FD_ISSET(s, &rset) || FD_ISSET(s, &wset)) {
+        if (getsockopt( s, SOL_SOCKET, SO_ERROR, (char*)&error, &len ) == SOCKET_ERROR) {
+            _fh_close(f);
+            return -1;
+        }
+    } else {
+        _fh_close(f);
+        return -1;
+    }
+
+    if (error) {
+        errno = error;
+        _fh_close(f);
+        return -1;
+    }
+
+done:
+    arg = 0;
+    if (ioctlsocket(s, FIONBIO, &arg)) {
+        _fh_close(f);
+        return -1;
+    }
+    return _fh_to_int(f);
+
+}
 
 int socket_network_client(const char *host, int port, int type)
 {
@@ -789,6 +886,23 @@ void  disable_tcp_nagle(int fd)
     setsockopt( fh->fh_socket, IPPROTO_TCP, TCP_NODELAY, (const char*)&on, sizeof(on) );
 }
 
+void enable_keepalive(int fd)
+{
+    FH   fh = _fh_from_int(fd);
+    int  on = 1;
+    struct tcp_keepalive alive;
+    DWORD  out_bytes;
+
+    if (!fh || fh->clazz != &_fh_socket_class)
+        return;
+
+    setsockopt( fh->fh_socket, SOL_SOCKET, SO_KEEPALIVE, (const char*)&on, sizeof(on) );
+    alive.onoff = 2;
+    alive.keepalivetime = 2;
+    alive.keepaliveinterval = 2;
+    WSAIoctl( fh->fh_socket, SIO_KEEPALIVE_VALS, &alive, sizeof(alive),
+              NULL, 0, &out_bytes, NULL, NULL );
+}
 /**************************************************************************/
 /**************************************************************************/
 /*****                                                                *****/

@@ -577,7 +577,7 @@ static void *reconnect_thread(void *vrecon)
 {
     reconnector *recon = vrecon;
     while (1) {
-        sleep(2);
+        sleep_seconds(2);
         if (recon->reconnect_bail) {
             D("reconnect bail\n");
             break;

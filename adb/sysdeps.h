@@ -49,6 +49,32 @@ typedef CRITICAL_SECTION          adb_mutex_t;
 #define  ADB_MUTEX(x)   extern adb_mutex_t  x;
 #include "mutex_list.h"
 
+/*
+ mingw32 is missing MStcpip.h so we will insert the definitions here until file
+ is brought in
+*/
+struct tcp_keepalive {
+    u_long  onoff;
+    u_long  keepalivetime;
+    u_long  keepaliveinterval;
+};
+
+#define SIO_RCVALL _WSAIOW(IOC_VENDOR, 1)
+#define SIO_RCVALL_MCAST _WSAIOW(IOC_VENDOR, 2)
+#define SIO_RCVALL_IGMPMCAST _WSAIOW(IOC_VENDOR, 3)
+#define SIO_KEEPALIVE_VALS _WSAIOW(IOC_VENDOR, 4)
+#define SIO_ABSORB_RTRALERT _WSAIOW(IOC_VENDOR, 5)
+#define SIO_UCAST_IF _WSAIOW(IOC_VENDOR, 6)
+#define SIO_LIMIT_BROADCASTS _WSAIOW(IOC_VENDOR, 7)
+#define SIO_INDEX_BIND _WSAIOW(IOC_VENDOR, 8)
+#define SIO_INDEX_MCASTIF _WSAIOW(IOC_VENDOR, 9)
+#define SIO_INDEX_ADD_MCAST _WSAIOW(IOC_VENDOR, 10)
+#define SIO_INDEX_DEL_MCAST _WSAIOW(IOC_VENDOR, 11)
+#define RCVALL_OFF 0
+#define RCVALL_ON 1
+#define RCVALL_SOCKETLEVELONLY 2
+
+
 extern void  adb_sysdeps_init(void);
 
 static __inline__ void adb_mutex_lock( adb_mutex_t*  lock )
@@ -83,6 +109,7 @@ static __inline__ void  close_on_exec(int  fd)
 
 extern void  disable_tcp_nagle(int  fd);
 extern void enable_keepalive(int fd);
+extern void sleep_seconds(int seconds);
 
 #define  lstat    stat   /* no symlinks on Win32 */
 
@@ -456,6 +483,12 @@ static __inline__ void  disable_tcp_nagle(int fd)
     int  on = 1;
     setsockopt( fd, IPPROTO_TCP, TCP_NODELAY, (void*)&on, sizeof(on) );
 }
+
+static __inline__ void sleep_seconds(int seconds)
+{
+    sleep(seconds);
+}
+
 
 static __inline__ void  enable_keepalive(int fd)
 {
