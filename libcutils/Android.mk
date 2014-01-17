@@ -33,7 +33,6 @@ commonSources := \
 	socket_loopback_client.c \
 	socket_loopback_server.c \
 	socket_network_client.c \
-	socket_network_client_timeout.c \
 	sockets.c \
 	config_utils.c \
 	cpu_info.c \
@@ -47,9 +46,7 @@ commonSources := \
 	threads.c \
 	sched_policy.c \
 	iosched_policy.c \
-	probe_module.c \
 	str_parms.c \
-	module_parsers.c \
 
 commonHostSources := \
         ashmem-host.c
@@ -71,7 +68,10 @@ endif
 ifneq ($(WINDOWS_HOST_ONLY),1)
     commonSources += \
         fs.c \
-        multiuser.c
+        multiuser.c \
+        socket_network_client_timeout.c \
+        probe_module.c \
+        module_parsers.c
 endif
 
 
