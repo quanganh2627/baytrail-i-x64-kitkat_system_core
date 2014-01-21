@@ -32,6 +32,8 @@
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 
+#define BATTERY_STATUS_DELAY (1500 * 1000) // 1.5s
+
 using namespace android;
 
 // Periodic chores intervals in seconds
@@ -144,6 +146,9 @@ static void uevent_event(void) {
 
     while (*cp) {
         if (!strcmp(cp, "SUBSYSTEM=" POWER_SUPPLY_SUBSYSTEM)) {
+            // FIXME: Sleep for a short while before updating, in order
+            // to allow the battery's sysfs status to be updated
+            usleep(BATTERY_STATUS_DELAY);
             battery_update();
             break;
         }
