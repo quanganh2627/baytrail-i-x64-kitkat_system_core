@@ -33,6 +33,7 @@
 
 #define POWER_SUPPLY_SUBSYSTEM "power_supply"
 #define POWER_SUPPLY_SYSFS_PATH "/sys/class/" POWER_SUPPLY_SUBSYSTEM
+bool readFromFileError = false;
 
 namespace android {
 
@@ -99,7 +100,8 @@ int BatteryMonitor::readFromFile(const String8& path, char* buf, size_t size) {
         return -1;
     int fd = open(path.string(), O_RDONLY, 0);
     if (fd == -1) {
-        KLOG_ERROR(LOG_TAG, "Could not open '%s'\n", path.string());
+        KLOG_ERROR(LOG_TAG, "Could not open '%s' [%s]\n", path.string(), strerror(errno));
+        readFromFileError = true;
         return -1;
     }
 
@@ -180,6 +182,9 @@ bool BatteryMonitor::update(struct BatteryProperties& bp) {
 bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
     struct BatteryProperties props;
     bool logthis;
+    //store previous polled battery level
+    static int batteryLevel = 0;
+    static int batteryVoltage = 0;
 
     props.chargerAcOnline = false;
     props.chargerUsbOnline = false;
@@ -196,7 +201,16 @@ bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
         props.batteryPresent = true;
 
     props.batteryLevel = getIntField(mHealthdConfig->batteryCapacityPath);
+    if (!props.batteryLevel && readFromFileError)
+        props.batteryLevel = batteryLevel;
+    batteryLevel = props.batteryLevel;
+    readFromFileError = false;
+
     props.batteryVoltage = getIntField(mHealthdConfig->batteryVoltagePath) / 1000;
+    if (!props.batteryVoltage && readFromFileError)
+        props.batteryVoltage = batteryVoltage;
+    batteryVoltage = props.batteryVoltage;
+    readFromFileError = false;
 
     if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
         props.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
