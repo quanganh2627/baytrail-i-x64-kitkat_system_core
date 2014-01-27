@@ -1378,7 +1378,7 @@ static int should_drop_privileges() {
 int adb_main(int is_daemon, int server_port)
 {
 #if !ADB_HOST
-    int port;
+    int port = 0;
     char value[PROPERTY_VALUE_MAX];
 
     umask(000);
@@ -1485,7 +1485,7 @@ int adb_main(int is_daemon, int server_port)
         printf("using port=%d\n", port);
         // listen on TCP port specified by service.adb.tcp.port property
         local_init(port);
-    } else if (!usb) {
+    } else if (!usb && (port != -1)) {
         // listen on default port
         local_init(DEFAULT_ADB_LOCAL_TRANSPORT_PORT);
     }
