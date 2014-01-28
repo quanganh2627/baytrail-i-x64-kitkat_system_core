@@ -290,12 +290,12 @@ void X86Assembler::ADD_REG_TO_REG(int src, int dst) {
 }
 
 void X86Assembler::ADD_IMM_TO_REG(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_ADD, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_ADD, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::ADD_IMM_TO_MEM(int imm, int disp, int dst) {
-    encoder_imm_mem(Mnemonic_ADD, OpndSize_32, imm, disp, dst, 0/*isBasePhysical*/, mStream);
+    encoder_imm_mem_diff_sizes(Mnemonic_ADD, OpndSize_32, imm, OpndSize_32, disp, dst, 0/*isBasePhysical*/, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
@@ -315,12 +315,12 @@ void X86Assembler::SUB_REG_TO_REG(int src, int dst) {
 }
 
 void X86Assembler::SUB_IMM_TO_REG(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_SUB, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_SUB, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::SUB_IMM_TO_MEM(int imm, int disp, int dst) {
-    encoder_imm_mem(Mnemonic_SUB, OpndSize_32, imm, disp, dst, 0/*isBasePhysical*/, mStream);
+    encoder_imm_mem_diff_sizes(Mnemonic_SUB, OpndSize_32, imm, OpndSize_32, disp, dst, 0/*isBasePhysical*/, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
@@ -342,7 +342,7 @@ void X86Assembler::CMP_REG_TO_REG(int src, int dst, OpndSize size) {
 }
 
 void X86Assembler::CMP_IMM_TO_REG(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_CMP, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_CMP, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
@@ -365,7 +365,7 @@ void X86Assembler::AND_REG_TO_REG(int src, int dst) {
 }
 
 void X86Assembler::AND_IMM_TO_REG(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_AND, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_AND, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
@@ -380,7 +380,7 @@ void X86Assembler::XOR(int src, int dst) {
 }
 
 void X86Assembler::OR_IMM_TO_REG(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_OR, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_OR, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
@@ -395,37 +395,37 @@ void X86Assembler::NEG(int dst) {
 }
 //shift
 void X86Assembler::SHL(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_SHL, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_SHL, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::SHL(int imm, int disp, int dst) {
-    encoder_imm_mem(Mnemonic_SHL, OpndSize_32, imm, disp, dst, 0/*isBasePhysical*/, mStream);
+    encoder_imm_mem_diff_sizes(Mnemonic_SHL, OpndSize_32, imm, OpndSize_32, disp, dst, 0/*isBasePhysical*/, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::SHR(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_SHR, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_SHR, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::SHR(int imm, int disp, int dst) {
-    encoder_imm_mem(Mnemonic_SHR, OpndSize_32, imm, disp, dst, 0/*isBasePhysical*/, mStream);
+    encoder_imm_mem_diff_sizes(Mnemonic_SHR, OpndSize_32, imm, OpndSize_32, disp, dst, 0/*isBasePhysical*/, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::SAR(int imm, int dst) {
-    encoder_imm_reg(Mnemonic_SAR, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_SAR, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::ROR(const int imm, int dst) {
-    encoder_imm_reg(Mnemonic_ROR, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_ROR, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
 void X86Assembler::ROR(int imm, int disp, int dst) {
-    encoder_imm_mem(Mnemonic_ROR, OpndSize_32, imm, disp, dst, 0/*isBasePhysical*/, mStream);
+    encoder_imm_mem_diff_sizes(Mnemonic_ROR, OpndSize_32, imm, OpndSize_32, disp, dst, 0/*isBasePhysical*/, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 //signed extension
@@ -469,7 +469,7 @@ void X86Assembler::MUL(int reg) {
 
 // data transfer...
 void X86Assembler::MOV_IMM_TO_REG(int32_t imm, int dst) {
-    encoder_imm_reg(Mnemonic_MOV, OpndSize_32, imm, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
+    encoder_imm_reg_diff_sizes(Mnemonic_MOV, OpndSize_32, imm, OpndSize_32, dst, 0/*isPhysical*/, LowOpndRegType_gp, mStream);
     mStream = mStream + encoder_get_inst_size(mStream);
 }
 
