@@ -123,11 +123,11 @@ struct {
     { "audiocomms.",       AID_MEDIA,    0 },
 #ifdef DOLBY_UDC
     { "dolby.audio",      AID_MEDIA,    0 },
-#endif // DOLBY_UDC
+#endif // DOLBY_UDC_END
 #ifdef DOLBY_DAP
     // used for setting Dolby specific properties
     { "dolby.", AID_SYSTEM,   0 },
-#endif // DOLBY_DAP
+#endif // DOLBY_END
     { NULL, 0, 0 }
 };
 
