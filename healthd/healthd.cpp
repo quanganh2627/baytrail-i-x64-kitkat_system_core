@@ -95,10 +95,20 @@ static void wakealarm_set_interval(int interval) {
 static void battery_update(void) {
     // Fast wake interval when on charger (watch for overheat);
     // slow wake interval when on battery (watch for drained battery).
+    struct BatteryProperties prop;
+    int new_wake_interval;
+    int chg_online = gBatteryMonitor->update(prop);
 
-   int new_wake_interval = gBatteryMonitor->update() ?
-       healthd_config.periodic_chores_interval_fast :
-           healthd_config.periodic_chores_interval_slow;
+    // do periodic polling on 0% capacity with charger connected
+    if (chg_online && (prop.batteryLevel == 0)) {
+       healthd_config.periodic_chores_interval_fast =
+                                   DEFAULT_PERIODIC_CHORES_INTERVAL_FAST;
+    } else {
+       healthd_config.periodic_chores_interval_fast = -1;
+       healthd_config.periodic_chores_interval_slow = -1;
+    }
+
+    new_wake_interval = healthd_config.periodic_chores_interval_fast;
 
     if (new_wake_interval != wakealarm_wake_interval)
             wakealarm_set_interval(new_wake_interval);
