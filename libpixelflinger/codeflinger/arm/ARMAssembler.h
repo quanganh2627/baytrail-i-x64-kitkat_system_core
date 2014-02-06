@@ -21,11 +21,10 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#include "tinyutils/Vector.h"
-#include "tinyutils/KeyedVector.h"
-#include "tinyutils/smartpointer.h"
-
-#include "tinyutils/smartpointer.h"
+#include "codeflinger/tinyutils/Vector.h"
+#include "codeflinger/tinyutils/KeyedVector.h"
+#include "codeflinger/tinyutils/smartpointer.h"
+#include "codeflinger/tinyutils/smartpointer.h"
 #include "codeflinger/arm/ARMAssemblerInterface.h"
 #include "codeflinger/CodeCache.h"
 
