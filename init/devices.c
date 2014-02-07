@@ -214,7 +214,7 @@ int add_inet_args(char *net_link, char *if_name, char *target_name)
 {
     struct inet_node *node = calloc(1, sizeof(*node));
 
-    NOTICE("%s: Net link:%s, If name:%s, New inet name:%s",
+    NOTICE("%s: Net link:%s, If name:%s, New inet name:%s\n",
             __func__, net_link, if_name, target_name);
 
     if (!node)
@@ -260,13 +260,13 @@ static char *get_inet_name(const char *inet_name, struct uevent *uevent)
     int lennetlink=0;
 
     if (!inet_name) {
-        ERROR("%s:ERROR network interface name is NULL.", __func__);
+        ERROR("%s:ERROR network interface name is NULL.\n", __func__);
         return NULL;
     }
-    NOTICE("%s:Checking inet:%s", __func__, inet_name);
+    NOTICE("%s:Checking inet:%si\n", __func__, inet_name);
 
     if (!uevent || !uevent->path) {
-        ERROR("%s:ERROR Uevent is NULL.", __func__);
+        ERROR("%s:ERROR Uevent is NULL.\n", __func__);
         return NULL;
     }
 
@@ -276,7 +276,7 @@ static char *get_inet_name(const char *inet_name, struct uevent *uevent)
 
         /* Check inet name with target name */
         if (!strcmp(inet_name, names->target_name)) {
-            ERROR("%s:Original inet name:%s is the same as target...skip...",
+            ERROR("%s:Original inet name:%s is the same as target...skip...\n",
                     __func__, inet_name);
             /* No need to continue parsing as target is same as original */
             continue;
@@ -284,7 +284,7 @@ static char *get_inet_name(const char *inet_name, struct uevent *uevent)
 
         /* Check inetnode's inet name */
         if (!strcmp(inet_name, names->if_name)) {
-            NOTICE("%s:RULE ==> [%s, %s] Target:%s",
+            NOTICE("%s:RULE ==> [%s, %s] Target:%s\n",
                     __func__, names->net_link,
                     names->if_name, names->target_name);
             /* Check wildcard */
@@ -293,7 +293,7 @@ static char *get_inet_name(const char *inet_name, struct uevent *uevent)
                 if (!addr_check) {
                     snprintf(address_path, sizeof(address_path),
                             "/sys%s/address", uevent->path);
-                    NOTICE("%s: Read net link addr at:%s",
+                    NOTICE("%s: Read net link addr at:%s\n",
                             __func__, address_path);
                     address = read_file(address_path, &sz);
                     addr_check = true;
@@ -301,20 +301,20 @@ static char *get_inet_name(const char *inet_name, struct uevent *uevent)
                 if (address) {
                     lennetlink = strlen(names->net_link);
                     if (!strncmp(names->net_link, address, lennetlink)) {
-                        NOTICE("%s: %s net_link addr FOUND",
+                        NOTICE("%s: %s net_link addr FOUND\n",
                                 __func__, address);
                         return names->target_name;
                     } else {
-                        ERROR("%s: %s net_link addr NOT FOUND",
+                        ERROR("%s: %s net_link addr NOT FOUND\n",
                                 __func__, names->net_link);
                     }
                 } else {
-                    ERROR("%s: ERROR: Net link addr is NULL for inet name:%s",
+                    ERROR("%s: ERROR: Net link addr is NULL for inet name:%s\n",
                             __func__, inet_name);
                 }
             }
             else {
-                NOTICE("%s:WILDCARD (*) FOR net_link", __func__);
+                NOTICE("%s:WILDCARD (*) FOR net_link\n", __func__);
                 return names->target_name;
             }
         }
@@ -326,7 +326,7 @@ int add_dev_args(unsigned int vid, unsigned int pid, char *dev_name, char *targe
 {
     struct dev_node *node = calloc(1, sizeof(*node));
 
-    NOTICE("%s: Vendor Id:%d, Product Id:%d, Device name:%s, New name:%s",
+    NOTICE("%s: Vendor Id:%d, Product Id:%d, Device name:%s, New name:%s\n",
             __func__, vid, pid, dev_name, target_name);
 
     if (!node)
@@ -372,7 +372,7 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
         return path;
 
     if (uevent->modalias) {
-            NOTICE("%s:Found Modalias:%s for Dev:%s",
+            NOTICE("%s:Found Modalias:%s for Dev:%s\n",
                     __func__, uevent->modalias, path);
             modalias = uevent->modalias;
     }
@@ -388,31 +388,31 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
 
         /* Check dev name with target name */
         if (!strcmp(dev_path, names->dev_target_name)) {
-            ERROR("%s:Dev name:%s is the same as target name...skip...",
+            ERROR("%s:Dev name:%s is the same as target name...skip...\n",
                     __func__, dev_path);
             /* No need to continue parsing as target is same as original */
             continue;
         }
 
-        NOTICE("%s:Checking %s, looking for vid:%d, pid:%d...",
+        NOTICE("%s:Checking %s, looking for vid:%d, pid:%d...\n",
                 __func__, dev_path, names->vid, names->pid);
 
         /* Retrieve device info */
         if (!modalias_check) {
             if (!modalias) {
                 /* Modalias not available in uevent */
-                NOTICE("%s:Retrieve Modalias from sysfs for dev:%s",
+                NOTICE("%s:Retrieve Modalias from sysfs for dev:%s\n",
                         __func__, path);
                 snprintf(path_ids, sizeof(path_ids),
                         "/sys%s/device/modalias", uevent->path);
-                NOTICE("%s:Modalias sysfs path:%s", __func__, path_ids);
+                NOTICE("%s:Modalias sysfs path:%s\n", __func__, path_ids);
                 modalias = read_file(path_ids, &sz);
                 if (sz == 0) {
-                    ERROR("%s: ERROR reading modalias file, err:%d",
+                    ERROR("%s: ERROR reading modalias file, err:%d\n",
                             __func__, errno);
                     /* Not a problem if wildcard selected for vid and pid */
                 } else {
-                    NOTICE("%s:Found Modalias:%s, sz:%d",
+                    NOTICE("%s:Found Modalias:%s, sz:%d\n",
                             __func__, modalias, sz);
                 }
             }
@@ -424,7 +424,7 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
                     sscanf(data,"v%dp%d", &vid, &pid);
                 }
                 else {
-                    ERROR("%s:Cannot find Vendor ID in %s",
+                    ERROR("%s:Cannot find Vendor ID in %s\n",
                             __func__, modalias);
                     modalias = NULL;
                 }
@@ -437,7 +437,7 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
             /* Search for Vendor Id */
             if (modalias) {
                 if (names->vid != vid) {
-                    ERROR("%s:WRONG ID VENDOR: vid:%d vs %d",
+                    ERROR("%s:WRONG ID VENDOR: vid:%d vs %d\n",
                             __func__, names->vid, vid);
                     continue;
                 }
@@ -451,7 +451,7 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
             /* Search for Product Id */
             if (modalias) {
                 if (names->pid != pid) {
-                    ERROR("%s:WRONG ID PRODUCT: pid:%d vs %d",
+                    ERROR("%s:WRONG ID PRODUCT: pid:%d vs %d\n",
                             __func__, names->pid, pid);
                     continue;
                 }
@@ -460,7 +460,7 @@ static char *get_dev_name(const char *path, struct uevent *uevent)
                 continue;
             }
         }
-        NOTICE("%s:RENAMING DEVICE %s [vid:%d, pid:%d, New dev name:%s]",
+        NOTICE("%s:RENAMING DEVICE %s [vid:%d, pid:%d, New dev name:%s]\n",
                 __func__, path, vid, pid, names->dev_target_name);
         return names->dev_target_name;
     }
@@ -1121,20 +1121,20 @@ static void handle_inet_event(struct uevent *uevent)
     int err=0;
 
     if (!uevent) {
-        ERROR("%s:ERROR Uevent is NULL", __func__);
+        ERROR("%s:ERROR Uevent is NULL\n", __func__);
         return;
     }
 
     if(!strncmp(uevent->subsystem, "net", 3))
     {
-        NOTICE("%s: FOUND NET SUBSYSTEM, Action:%s, Path:%s",
+        NOTICE("%s: FOUND NET SUBSYSTEM, Action:%s, Path:%s\n",
                 __func__, uevent->action, uevent->path);
 
         if (!strcmp(uevent->action,"add")) {
             /* do we have a name? */
             name = strrchr(uevent->path, '/');
             if(!name) {
-                ERROR("%s:ERROR NO INET NAME.", __func__);
+                ERROR("%s:ERROR NO INET NAME.\n", __func__);
                 return;
             }
             name++;
@@ -1143,26 +1143,26 @@ static void handle_inet_event(struct uevent *uevent)
             inet_name = get_inet_name(name, uevent);
             if (inet_name) {
                 /* Rename Net Interface */
-                NOTICE("%s:Renaming %s net interface with new name:%s",
+                NOTICE("%s:Renaming %s net interface with new name:%s\n",
                         __func__, name, inet_name);
                 if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
-                    ERROR("%s:ERROR socket(PF_INET, SOCK_DGRAM, 0)",
+                    ERROR("%s:ERROR socket(PF_INET, SOCK_DGRAM, 0)\n",
                             __func__);
                     return;
                 }
 
                 strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
                 strncpy(ifr.ifr_newname, inet_name, sizeof(ifr.ifr_newname));
-                NOTICE("%s:Calling IOTCL SIOCSIFNAME, %s ==> %s",
+                NOTICE("%s:Calling IOTCL SIOCSIFNAME, %s ==> %s\n",
                         __func__, ifr.ifr_name, ifr.ifr_newname);
                 if ((err = ioctl(fd, SIOCSIFNAME, &ifr))==-1) {
-                    ERROR("%s:ERROR ioctl(SIOCSIFNAME), err:0x%X",
+                    ERROR("%s:ERROR ioctl(SIOCSIFNAME), err:0x%X\n",
                             __func__, errno);
                     return;
                 }
-                NOTICE("%s:RENAMING SUCCESS !", __func__);
+                NOTICE("%s:RENAMING SUCCESS !\n", __func__);
             } else {
-                ERROR("%s:No Renaming for %s net interface",
+                ERROR("%s:No Renaming for %s net interface\n",
                         __func__, name);
             }
         }
