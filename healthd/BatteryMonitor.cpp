@@ -280,8 +280,21 @@ bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
     if (mBatteryPropertiesRegistrar != NULL)
         mBatteryPropertiesRegistrar->notifyListeners(props);
 
-    if (bp)
-       memcpy(bp, &props, sizeof(struct BatteryProperties));
+    if (bp) {
+        bp->chargerAcOnline = props.chargerAcOnline;
+        bp->chargerUsbOnline = props.chargerUsbOnline;
+        bp->chargerWirelessOnline = props.chargerWirelessOnline;
+        bp->batteryStatus = props.batteryStatus;
+        bp->batteryHealth = props.batteryHealth;
+        bp->batteryPresent = props.batteryPresent;
+        bp->batteryLevel = props.batteryLevel;
+        bp->batteryVoltage = props.batteryVoltage;
+        bp->batteryCurrentNow = props.batteryCurrentNow;
+        bp->batteryCurrentAvg = props.batteryCurrentAvg;
+        bp->batteryChargeCounter = props.batteryChargeCounter;
+        bp->batteryTemperature = props.batteryTemperature;
+        bp->batteryTechnology = props.batteryTechnology;
+    }
 
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
