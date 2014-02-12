@@ -41,6 +41,7 @@ class BatteryMonitor {
 
     void init(struct healthd_config *hc, bool nosvcmgr);
     bool update(void);
+    bool update(struct BatteryProperties& bp);
 
   private:
     struct healthd_config *mHealthdConfig;
@@ -54,6 +55,7 @@ class BatteryMonitor {
     PowerSupplyType readPowerSupplyType(const String8& path);
     bool getBooleanField(const String8& path);
     int getIntField(const String8& path);
+    bool do_update(struct BatteryProperties *bp);
 };
 
 }; // namespace android

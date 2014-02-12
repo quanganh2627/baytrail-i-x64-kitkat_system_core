@@ -170,6 +170,14 @@ int BatteryMonitor::getIntField(const String8& path) {
 }
 
 bool BatteryMonitor::update(void) {
+    return do_update(NULL);
+}
+
+bool BatteryMonitor::update(struct BatteryProperties& bp) {
+    return do_update(&bp);
+}
+
+bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
     struct BatteryProperties props;
     bool logthis;
 
@@ -271,6 +279,9 @@ bool BatteryMonitor::update(void) {
 
     if (mBatteryPropertiesRegistrar != NULL)
         mBatteryPropertiesRegistrar->notifyListeners(props);
+
+    if (bp)
+       memcpy(bp, &props, sizeof(struct BatteryProperties));
 
     return props.chargerAcOnline | props.chargerUsbOnline |
             props.chargerWirelessOnline;
