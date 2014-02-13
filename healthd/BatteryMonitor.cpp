@@ -211,7 +211,6 @@ bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
 
     const int SIZE = 128;
     char buf[SIZE];
-    String8 btech;
 
     if (readFromFile(mHealthdConfig->batteryStatusPath, buf, SIZE) > 0)
         props.batteryStatus = getBatteryStatus(buf);
