@@ -128,6 +128,7 @@ struct {
     // used for setting Dolby specific properties
     { "dolby.", AID_SYSTEM,   0 },
 #endif // DOLBY_END
+    { "service.bootanim.exit", AID_GRAPHICS,    0 },
     { NULL, 0, 0 }
 };
 
