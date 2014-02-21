@@ -83,6 +83,7 @@ struct uevent {
     const char *device_name;
     const char *country;
     const char *modalias;
+    const char *type;
     int partition_num;
     int major;
     int minor;
@@ -132,6 +133,18 @@ struct platform_node {
     struct listnode list;
 };
 
+struct usb_device_class_node {
+    char *devclass;
+    mode_t perm;
+    unsigned int uid;
+    unsigned int gid;
+    unsigned short pwr_ctrl_auto;
+    unsigned short pwr_ctrl_on;
+    unsigned short pwr_ctrl_perm;
+    struct listnode list;
+};
+
+
 list_declare(ltriggers);
 
 struct inet_node {
@@ -144,12 +157,16 @@ struct dev_node {
     struct listnode plist;
 };
 
+/* defined in builtins.c */
+extern int write_file(const char *path, const char *value);
+
 static list_declare(lmod_args);
 static list_declare(sys_perms);
 static list_declare(dev_perms);
 static list_declare(dev_names);
 static list_declare(inet_names);
 static list_declare(platform_names);
+static list_declare(usb_device_classes);
 
 int add_dev_perms(const char *name, const char *attr,
                   mode_t perm, unsigned int uid, unsigned int gid,
@@ -177,6 +194,48 @@ int add_dev_perms(const char *name, const char *attr,
         list_add_tail(&sys_perms, &node->plist);
     else
         list_add_tail(&dev_perms, &node->plist);
+
+    return 0;
+}
+
+int add_usb_device_class_matching(
+                         const char *devclass,
+                         mode_t perm, unsigned int uid,
+                         unsigned int gid, const char* options) {
+    struct usb_device_class_node *node = calloc(1, sizeof(*node));
+    if (!node)
+        return -ENOMEM;
+
+    node->devclass = strdup(devclass);
+    if (!node->devclass)
+        return -ENOMEM;
+
+    node->perm = perm;
+    node->uid = uid;
+    node->gid = gid;
+
+    if (options) {
+        /* enable autosuspend for devices */
+        if (strstr(options, "suspend_auto")) {
+            node->pwr_ctrl_auto = 1;
+            node->pwr_ctrl_on = 0;
+        }
+
+        /* disable autosuspend for devices */
+        if (strstr(options, "suspend_on")) {
+            node->pwr_ctrl_auto = 0;
+            node->pwr_ctrl_on = 1;
+        }
+
+        /* change the owner/permission for power/control
+         * sysfs node.
+         */
+        if (strstr(options, "pwr_ctrl_perm")) {
+            node->pwr_ctrl_perm = 1;
+        }
+    }
+
+    list_add_tail(&usb_device_classes, &node->list);
 
     return 0;
 }
@@ -733,6 +792,7 @@ static void parse_event(const char *msg, struct uevent *uevent)
     uevent->partition_num = -1;
     uevent->device_name = NULL;
     uevent->modalias = NULL;
+    uevent->type = NULL;
 
         /* currently ignoring SEQNUM */
     while(*msg) {
@@ -763,6 +823,9 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
+        } else if(!strncmp(msg, "TYPE=", 5)) {
+            msg += 5;
+            uevent->type = msg;
         } else if (!strncmp(msg, "COUNTRY=", 8)) {
             msg += 8;
             uevent->country = msg;
@@ -892,6 +955,52 @@ static char **parse_platform_block_device(struct uevent *uevent)
     return links;
 }
 
+static void handle_usb_device_class_rule(struct uevent *uevent, const char *devpath)
+{
+    char sysfs[512];
+    struct listnode *node;
+    struct usb_device_class_node *usbdc;
+
+    /* nothing to process */
+    if (!uevent || !uevent->type || !devpath) {
+        return;
+    }
+
+    list_for_each(node, &usb_device_classes) {
+        usbdc = node_to_item(node, struct usb_device_class_node, list);
+
+        if (fnmatch(usbdc->devclass, uevent->type, 0) != 0)
+            continue;
+
+        /* change device node owner/permission */
+        chown(devpath, usbdc->uid, usbdc->gid);
+        chmod(devpath, usbdc->perm);
+
+        /* power-related options to manipulate <sysfs path>/power/control */
+        if (usbdc->pwr_ctrl_auto || usbdc->pwr_ctrl_on || usbdc->pwr_ctrl_perm) {
+            /* make sure buf is larger enough for
+             * adding "/sys" and "/power/control" and '\0'.
+             */
+            if ((strlen(uevent->path) + 4 + 14 + 1) > sizeof(sysfs))
+                continue;
+
+            sprintf(sysfs, "/sys%s/power/control", uevent->path);
+
+            if (usbdc->pwr_ctrl_auto) {
+                write_file(sysfs, "auto");
+            } else if (usbdc->pwr_ctrl_on) {
+                write_file(sysfs, "on");
+            }
+
+            if (usbdc->pwr_ctrl_perm) {
+                INFO("fixup %s %d %d 0%o\n", sysfs, usbdc->uid, usbdc->gid, usbdc->perm);
+                chown(sysfs, usbdc->uid, usbdc->gid);
+                chmod(sysfs, usbdc->perm);
+            }
+        }
+    }
+}
+
 static void handle_device(struct uevent *uevent,
                           const char *devpath,
                           int block,
@@ -982,6 +1091,7 @@ static void handle_generic_device_event(struct uevent *uevent)
     const char *name;
     char devpath[96] = {0};
     char **links = NULL;
+    unsigned short is_usb_dev = 0;
 
     name = parse_device_name(uevent, 64);
     if (!name)
@@ -1022,6 +1132,8 @@ static void handle_generic_device_event(struct uevent *uevent)
                  make_dir(devpath, 0755);
                  snprintf(devpath, sizeof(devpath), "/dev/bus/usb/%03d/%03d", bus_id, device_id);
              }
+
+             is_usb_dev = 1;
          } else {
              /* ignore other USB events */
              return;
@@ -1063,6 +1175,9 @@ static void handle_generic_device_event(struct uevent *uevent)
          snprintf(devpath, sizeof(devpath), "%s%s", base, name);
 
      handle_device(uevent, devpath, 0, links);
+
+     if (is_usb_dev)
+         handle_usb_device_class_rule(uevent, devpath);
 }
 
 int module_probe(const char *modalias)
