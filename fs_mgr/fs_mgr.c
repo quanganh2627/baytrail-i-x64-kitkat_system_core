@@ -484,7 +484,14 @@ static void check_fs(char *blk_device, char *fs_type, char *target)
          */
         ret = mount(blk_device, target, fs_type, tmpmnt_flags, tmpmnt_opts);
         if (!ret) {
-            umount(target);
+            ret = umount(target);
+            if (ret) {
+                sync();
+                ret = umount(target);
+                if (ret) {
+                   ERROR("Umount %s failed:%s.\n", blk_device, strerror(errno));
+                }
+            }
         }
 
         INFO("Running %s on %s\n", E2FSCK_BIN, blk_device);
