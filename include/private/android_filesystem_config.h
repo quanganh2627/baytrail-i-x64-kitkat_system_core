@@ -82,6 +82,7 @@
  * That's why it's better to pick-up the highest possible number for non-aosp aid:
  * This will allow the  AOSP user list to grow in the future without impacting non-asop aid.
  */
+#define AID_MEICLIENT     1998  /* mei client */
 #define AID_SMARTCARD     1999  /* smart card subsystem */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
@@ -186,6 +187,7 @@ static const struct android_id_info android_ids[] = {
 
     // Non-Aosp user id
     { "smartcard",     AID_SMARTCARD, },
+    { "mei",           AID_MEICLIENT, },
 };
 
 #define android_id_count \
