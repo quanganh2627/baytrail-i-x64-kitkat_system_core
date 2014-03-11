@@ -255,6 +255,9 @@ enum {
 
     AUDIO_CHANNEL_IN_MONO   = AUDIO_CHANNEL_IN_FRONT,
     AUDIO_CHANNEL_IN_STEREO = (AUDIO_CHANNEL_IN_LEFT | AUDIO_CHANNEL_IN_RIGHT),
+    AUDIO_CHANNEL_IN_SUBMIX_5POINT1 = (AUDIO_CHANNEL_IN_LEFT|AUDIO_CHANNEL_IN_RIGHT|
+          AUDIO_CHANNEL_IN_FRONT|AUDIO_CHANNEL_IN_BACK|AUDIO_CHANNEL_IN_LEFT_PROCESSED|
+          AUDIO_CHANNEL_IN_RIGHT_PROCESSED),
     AUDIO_CHANNEL_IN_FRONT_BACK = (AUDIO_CHANNEL_IN_FRONT | AUDIO_CHANNEL_IN_BACK),
     AUDIO_CHANNEL_IN_ALL    = (AUDIO_CHANNEL_IN_LEFT |
                                AUDIO_CHANNEL_IN_RIGHT |
@@ -269,7 +272,8 @@ enum {
                                AUDIO_CHANNEL_IN_Y_AXIS |
                                AUDIO_CHANNEL_IN_Z_AXIS |
                                AUDIO_CHANNEL_IN_VOICE_UPLINK |
-                               AUDIO_CHANNEL_IN_VOICE_DNLINK),
+                               AUDIO_CHANNEL_IN_VOICE_DNLINK |
+                               AUDIO_CHANNEL_IN_SUBMIX_5POINT1),
 };
 
 typedef uint32_t audio_channel_mask_t;
@@ -564,7 +568,7 @@ static inline audio_channel_mask_t audio_channel_out_mask_from_count(uint32_t ch
     }
 }
 
-/* Similar to above, but for input.  Currently handles only mono and stereo. */
+/* Similar to above, but for input.  Currently handles only mono, stereo and six (only submix). */
 static inline audio_channel_mask_t audio_channel_in_mask_from_count(uint32_t channel_count)
 {
     switch (channel_count) {
@@ -572,6 +576,8 @@ static inline audio_channel_mask_t audio_channel_in_mask_from_count(uint32_t cha
         return AUDIO_CHANNEL_IN_MONO;
     case 2:
         return AUDIO_CHANNEL_IN_STEREO;
+    case 6:
+        return AUDIO_CHANNEL_IN_SUBMIX_5POINT1;
     default:
         return 0;
     }
