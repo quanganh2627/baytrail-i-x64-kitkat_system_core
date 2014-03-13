@@ -507,11 +507,13 @@ static void parse_uevent(const char *msg, struct uevent *uevent)
 static void process_ps_uevent(struct charger *charger, struct uevent *uevent)
 {
     int online;
-    char ps_type[32];
+    char ps_type[32], str_online[3];
     struct power_supply *supply = NULL;
     int i;
     bool was_online = false;
     bool battery = false;
+    struct listnode *node;
+    char path_online[PATH_MAX];
 
     if (uevent->ps_type[0] == '\0') {
         char *path;
@@ -535,10 +537,6 @@ static void process_ps_uevent(struct charger *charger, struct uevent *uevent)
 
     online = atoi(uevent->ps_online);
     supply = find_supply(charger, uevent->ps_name);
-    if (supply) {
-        was_online = supply->online;
-        supply->online = online;
-    }
 
     if (!strcmp(uevent->action, "add")) {
         if (!supply) {
@@ -546,12 +544,18 @@ static void process_ps_uevent(struct charger *charger, struct uevent *uevent)
                                 online);
             if (!supply) {
                 LOGE("cannot add supply '%s' (%s %d)\n", uevent->ps_name,
-                     uevent->ps_type, online);
+                    uevent->ps_type, online);
                 return;
             }
+
             /* only pick up the first battery for now */
             if (battery && !charger->battery)
                 charger->battery = supply;
+
+            /* update with online charge sources as we are adding it to the supply list */
+            if (!battery && online)
+                charger->num_supplies_online++;
+
         } else {
             LOGE("supply '%s' already exists..\n", uevent->ps_name);
         }
@@ -574,11 +578,25 @@ static void process_ps_uevent(struct charger *charger, struct uevent *uevent)
 
     /* allow battery to be managed in the supply list but make it not
      * contribute to online power supplies. */
-    if (!battery) {
-        if (was_online && !online)
-            charger->num_supplies_online--;
-        else if (supply && !was_online && online)
-            charger->num_supplies_online++;
+    /* For every PSY change loop through all avalilable charge sources */
+    list_for_each(node, &charger->supplies) {
+        supply = node_to_item(node, struct power_supply, list);
+        if (strncmp("Battery", supply->type, sizeof(supply->type))) {
+            sprintf(path_online,"/sys/class/power_supply/%s/online", supply->name);
+            if (read_file(path_online, str_online, sizeof(str_online))<0) {
+                LOGI("online attribute is NULL for %s\n",supply->name);
+                continue;
+            }
+
+            online = atoi(str_online);
+            was_online = supply->online;
+            supply->online = online;
+            if (was_online && !online) {
+                charger->num_supplies_online--;
+            } else if (!was_online && online) {
+                charger->num_supplies_online++;
+            }
+        }
     }
 
     LOGI("power supply %s (%s) %s (action=%s num_online=%d num_supplies=%d)\n",
