@@ -442,6 +442,7 @@ typedef struct {
     int64_t duration_us;                // duration in microseconds, -1 if unknown
     bool has_video;                     // true if stream is tied to a video stream
     bool is_streaming;                  // true if streaming, false if local playback
+    uint32_t sessionId;
 } audio_offload_info_t;
 
 #define AUDIO_MAKE_OFFLOAD_INFO_VERSION(maj,min) \
