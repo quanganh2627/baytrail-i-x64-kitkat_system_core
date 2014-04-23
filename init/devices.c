@@ -1299,6 +1299,7 @@ static int load_firmware(int fw_fd, int loading_fd, int data_fd)
     while (len_to_copy > 0) {
         char buf[PAGE_SIZE];
         ssize_t nr;
+        ssize_t nw = 0;
 
         nr = read(fw_fd, buf, sizeof(buf));
         if(!nr)
@@ -1310,8 +1311,6 @@ static int load_firmware(int fw_fd, int loading_fd, int data_fd)
 
         len_to_copy -= nr;
         while (nr > 0) {
-            ssize_t nw = 0;
-
             nw = write(data_fd, buf + nw, nr);
             if(nw <= 0) {
                 ret = -1;
