@@ -533,9 +533,11 @@ static int is_last_command(struct action *act, struct command *cmd)
     return (list_tail(&act->commands) == &cmd->clist);
 }
 
+#define COMMAND_STR_LEN  200
 void execute_one_command(void)
 {
-    int ret;
+    int ret, i;
+    char cmd[COMMAND_STR_LEN + 1] = "";
 
     if (!cur_action || !cur_command || is_last_command(cur_action, cur_command)) {
         cur_action = action_remove_queue_head();
@@ -552,8 +554,15 @@ void execute_one_command(void)
         return;
 
     ret = cur_command->func(cur_command->nargs, cur_command->args);
-    INFO("command '%s' r=%d\n", cur_command->args[0], ret);
+
+    strncat(cmd, cur_command->args[0], COMMAND_STR_LEN - strlen(cmd));
+    for (i = 1; i < cur_command->nargs; i++) {
+        strncat(cmd, " ", COMMAND_STR_LEN - strlen(cmd));
+        strncat(cmd, cur_command->args[i], COMMAND_STR_LEN - strlen(cmd));
+    }
+    INFO("command '%s' r=%d\n", cmd, ret);
 }
+
 static void action_execute_all_setprops(struct action *act)
 {
     struct command *c;
