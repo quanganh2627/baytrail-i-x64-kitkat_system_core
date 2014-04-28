@@ -32,6 +32,14 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (C) 20[14] Intel Corporation.  All rights reserved.
+ * Intel Confidential                                  RS-NDA # RS-8051151
+ * This [file/library] contains Houdini confidential information of Intel Corporation
+ * which is subject to a non-disclosure agreement between Intel Corporation
+ * and you or your company.
+ */
+
 #include <sys/param.h>
 #include <sys/stat.h>
 
