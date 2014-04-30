@@ -493,6 +493,17 @@ static void msg_restart(const char *name)
     }
 }
 
+static void handle_dev_add_msg(const char *name)
+{
+    queue_device_added_removed_triggers(name, true);
+}
+
+static void handle_dev_rem_msg(const char *name)
+{
+    queue_device_added_removed_triggers(name, false);
+}
+
+
 void handle_control_message(const char *msg, const char *arg)
 {
     if (!strcmp(msg,"start")) {
@@ -501,6 +512,10 @@ void handle_control_message(const char *msg, const char *arg)
         msg_stop(arg);
     } else if (!strcmp(msg,"restart")) {
         msg_restart(arg);
+    } else if (!strcmp(msg,"dev_added")) {
+        handle_dev_add_msg(arg);
+    } else if (!strcmp(msg,"dev_removed")) {
+       handle_dev_rem_msg(arg);
     } else {
         ERROR("unknown control msg '%s'\n", msg);
     }
