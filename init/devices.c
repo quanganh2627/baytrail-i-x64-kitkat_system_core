@@ -1097,8 +1097,10 @@ static void handle_device_event(struct uevent *uevent)
         }
     }
 
-    if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change"))
+    if (!strcmp(uevent->action,"add") || !strcmp(uevent->action, "change")
+            || !strcmp(uevent->action, "online")) {
         fixup_sys_perms(uevent->path);
+    }
 
     if (!strncmp(uevent->subsystem, "block", 5)) {
         handle_block_device_event(uevent);
