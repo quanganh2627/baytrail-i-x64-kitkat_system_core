@@ -1,3 +1,9 @@
+# Copyright (C) 20[14] Intel Corporation.  All rights reserved.
+# Intel Confidential                                  RS-NDA # RS-8051151
+# This [file/library] contains Houdini confidential information of Intel Corporation
+# which is subject to a non-disclosure agreement between Intel Corporation
+# and you or your company.
+
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -95,6 +101,11 @@ LOCAL_SHARED_LIBRARIES := \
 	libc \
 	libusbhost \
 	libselinux
+
+ifeq ($(INTEL_HOUDINI), true)
+    LOCAL_CFLAGS += -DWITH_HOUDINI
+    LOCAL_STATIC_LIBRARIES += houdini_hook
+endif
 
 LOCAL_MODULE := toolbox
 

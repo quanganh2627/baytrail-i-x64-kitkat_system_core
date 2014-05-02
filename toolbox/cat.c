@@ -32,6 +32,14 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * Copyright (C) 20[14] Intel Corporation.  All rights reserved.
+ * Intel Confidential                                  RS-NDA # RS-8051151
+ * This [file/library] contains Houdini confidential information of Intel Corporation
+ * which is subject to a non-disclosure agreement between Intel Corporation
+ * and you or your company.
+ */
+
 #include <sys/param.h>
 #include <sys/stat.h>
 
@@ -183,6 +191,10 @@ raw_cat(int rfd)
 	}
 }
 
+#ifdef WITH_HOUDINI
+extern int houdini_hook_open(const char *path, int flags, int mode);
+#endif
+
 static void
 raw_args(char **argv)
 {
@@ -196,7 +208,11 @@ raw_args(char **argv)
 				fd = fileno(stdin);
 			else if (fflag) {
 				struct stat st;
+#ifdef WITH_HOUDINI
+				fd = houdini_hook_open(*argv, O_RDONLY|O_NONBLOCK, 0);
+#else
 				fd = open(*argv, O_RDONLY|O_NONBLOCK, 0);
+#endif
 				if (fd < 0)
 					goto skip;
 
@@ -210,7 +226,11 @@ raw_args(char **argv)
 					goto skipnomsg;
 				}
 			}
+#ifdef WITH_HOUDINI
+			else if ((fd = houdini_hook_open(*argv, O_RDONLY, 0)) < 0) {
+#else
 			else if ((fd = open(*argv, O_RDONLY, 0)) < 0) {
+#endif
 skip:
 				perror(*argv);
 skipnomsg:
