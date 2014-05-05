@@ -364,6 +364,7 @@ on boot
     setprop net.tcp.buffersize.gprs    4092,8760,11680,4096,8760,11680
     setprop net.tcp.buffersize.evdo    4094,87380,262144,4096,16384,262144
 
+on property:hald.status=ready
     class_start core
     class_start main
 
