@@ -88,6 +88,7 @@
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
 #define AID_DIAG          2002  /* access to diagnostic resources */
+#define AID_DPTF          2999  /* DPTF subsystem */
 
 /* The 3000 series are intended for use as supplemental group id's only.
  * They indicate special Android capabilities that the kernel is aware of. */
@@ -168,6 +169,8 @@ static const struct android_id_info android_ids[] = {
     { "cache",         AID_CACHE, },
     { "diag",          AID_DIAG, },
 
+    { "dptf",          AID_DPTF, },
+
     { "net_bt_admin",  AID_NET_BT_ADMIN, },
     { "net_bt",        AID_NET_BT, },
     { "inet",          AID_INET, },
@@ -217,6 +220,9 @@ static const struct fs_path_config android_dirs[] = {
     { 00771, AID_SHELL,  AID_SHELL,  0, "data/local" },
     { 01771, AID_SYSTEM, AID_MISC,   0, "data/misc" },
     { 00770, AID_DHCP,   AID_DHCP,   0, "data/misc/dhcp" },
+    { 00770, AID_DPTF,   AID_DPTF,   0, "mnt/dptf" },
+    { 00770, AID_DPTF,   AID_DPTF,   0, "system/etc/dptf" },
+    { 00770, AID_DPTF,   AID_DPTF,   0, "data/misc/dptf" },
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media" },
     { 00775, AID_MEDIA_RW, AID_MEDIA_RW, 0, "data/media/Music" },
     { 00771, AID_SYSTEM, AID_SYSTEM, 0, "data" },
@@ -256,6 +262,9 @@ static const struct fs_path_config android_files[] = {
      * Do not change. */
     { 02750, AID_ROOT,      AID_INET,      0, "system/bin/netcfg" },
 
+    /* DPTF requires raw socket capability in eng build for debugging purposes */
+    { 00750, AID_DPTF,      AID_DPTF,      1 << CAP_NET_RAW, "system/bin/esif_ufd" },
+
     /* the following five files are INTENTIONALLY set-uid, but they
      * are NOT included on user builds. */
     { 06755, AID_ROOT,      AID_ROOT,      0, "system/xbin/su" },
@@ -279,6 +288,12 @@ static const struct fs_path_config android_files[] = {
     { 00750, AID_ROOT,      AID_SHELL,     0, "charger*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/fs_mgr" },
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
+
+    /* DPTF files */
+    { 00640, AID_DPTF,      AID_DPTF,      0, "system/lib/Dptf*" },
+    { 00640, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/dv/*" },
+    { 00640, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/bin/*" },
+
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
 };
 
