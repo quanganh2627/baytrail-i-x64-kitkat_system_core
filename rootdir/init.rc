@@ -372,6 +372,7 @@ on boot
 # Define default initial receive window size in segments.
     setprop net.tcp.default_init_rwnd 60
 
+on property:hald.status=ready
     class_start core
     class_start main
 
