@@ -290,9 +290,9 @@ static const struct fs_path_config android_files[] = {
     { 00640, AID_ROOT,      AID_SHELL,     0, "fstab.*" },
 
     /* DPTF files */
-    { 00640, AID_DPTF,      AID_DPTF,      0, "system/lib/Dptf*" },
-    { 00640, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/dv/*" },
-    { 00640, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/bin/*" },
+    { 00644, AID_DPTF,      AID_DPTF,      0, "system/lib/Dptf*" },
+    { 00644, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/dv/*" },
+    { 00644, AID_DPTF,      AID_DPTF,      0, "system/etc/dptf/bin/*" },
 
     { 00644, AID_ROOT,      AID_ROOT,      0, 0 },
 };
