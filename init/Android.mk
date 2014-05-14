@@ -8,6 +8,8 @@ LOCAL_SRC_FILES:= \
 	init.c \
 	devices.c \
 	property_service.c \
+	efivars.c \
+	autodetect.c \
 	util.c \
 	parser.c \
 	keychords.c \
