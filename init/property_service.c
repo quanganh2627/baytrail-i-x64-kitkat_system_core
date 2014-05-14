@@ -501,6 +501,8 @@ void property_init(void)
     init_property_area();
 }
 
+
+
 void property_load_boot_defaults(void)
 {
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
@@ -536,8 +538,13 @@ void load_persist_props(void)
     load_persistent_properties();
 }
 
+
+extern void autodetect_properties(void);
+
 void load_all_props(void)
 {
+    autodetect_properties();
+
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
