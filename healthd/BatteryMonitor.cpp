@@ -213,7 +213,7 @@ bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
     readFromFileError = false;
 
     if (!mHealthdConfig->batteryCurrentNowPath.isEmpty())
-        props.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath);
+        props.batteryCurrentNow = getIntField(mHealthdConfig->batteryCurrentNowPath) / 1000;
 
     if (!mHealthdConfig->batteryCurrentAvgPath.isEmpty())
         props.batteryCurrentAvg = getIntField(mHealthdConfig->batteryCurrentAvgPath) / 1000;
@@ -281,6 +281,11 @@ bool BatteryMonitor::do_update(struct BatteryProperties *bp) {
             char b[20];
 
             snprintf(b, sizeof(b), " c=%d", props.batteryCurrentAvg);
+            strlcat(dmesgline, b, sizeof(dmesgline));
+        } else if (!mHealthdConfig->batteryCurrentNowPath.isEmpty()) {
+            char b[20];
+
+            snprintf(b, sizeof(b), " c=%d", props.batteryCurrentNow);
             strlcat(dmesgline, b, sizeof(dmesgline));
         }
 
