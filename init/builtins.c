@@ -428,6 +428,7 @@ int do_mount(int nargs, char **args)
                     close(fd);
 
                     if (mount(tmp, target, system, flags, options) < 0) {
+                        ERROR("can't mount %s %s %s: %s", system, source, target, strerror(errno));
                         ioctl(loop, LOOP_CLR_FD, 0);
                         close(loop);
                         return -1;
