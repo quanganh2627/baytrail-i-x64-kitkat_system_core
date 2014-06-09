@@ -120,7 +120,7 @@ tcp_handle *tcp_open(const char *host)
         exit(1);
     }
 
-    memset(&serv_addr, sizeof(serv_addr), 0);
+    memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     memcpy(&serv_addr.sin_addr.s_addr,
            server->h_addr,
