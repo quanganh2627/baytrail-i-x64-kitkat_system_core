@@ -219,9 +219,9 @@ void set_device_permission(int nargs, char **args)
 
 
     if (usb_device_class_rule) {
-        add_usb_device_class_matching(attr, perm, uid, gid, options);
+	add_usb_device_class_matching(attr, perm, uid, gid, options);
     } else {
-        add_dev_perms(name, attr, perm, uid, gid, wildcard);
+	add_dev_perms(name, attr, perm, uid, gid, wildcard);
     }
 
     free(tmp);

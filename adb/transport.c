@@ -349,18 +349,18 @@ static void *input_thread(void *_t)
         if(p->msg.command == A_SYNC){
             if(p->msg.arg0 == 0) {
 #if !ADB_HOST
-		if (t->type == kTransportUsb)
-			D("%s: transport SYNC offline without kicking transport\n",
-				t->serial);
-		else {
-			D("%s: transport SYNC offline\n", t->serial);
-			put_apacket(p);
-			break;
-		}
+	if (t->type == kTransportUsb)
+		D("%s: transport SYNC offline without kicking transport\n",
+			t->serial);
+	else {
+		D("%s: transport SYNC offline\n", t->serial);
+		put_apacket(p);
+		break;
+	}
 #else
-                D("%s: transport SYNC offline\n", t->serial);
-                put_apacket(p);
-                break;
+	D("%s: transport SYNC offline\n", t->serial);
+	put_apacket(p);
+	break;
 #endif
             } else {
                 if(p->msg.arg1 == t->sync_token) {

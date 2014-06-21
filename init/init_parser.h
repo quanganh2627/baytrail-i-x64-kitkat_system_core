@@ -21,8 +21,6 @@
 
 #define INIT_PARSER_MAXARGS 64
 
-#include <stdbool.h>
-
 struct action;
 
 struct action *action_remove_queue_head(void);

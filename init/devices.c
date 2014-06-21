@@ -144,7 +144,6 @@ struct usb_device_class_node {
     struct listnode list;
 };
 
-
 list_declare(ltriggers);
 
 struct inet_node {
@@ -198,6 +197,7 @@ int add_dev_perms(const char *name, const char *attr,
     return 0;
 }
 
+
 int add_usb_device_class_matching(
                          const char *devclass,
                          mode_t perm, unsigned int uid,
@@ -238,6 +238,7 @@ int add_usb_device_class_matching(
     list_add_tail(&usb_device_classes, &node->list);
 
     return 0;
+
 }
 
 int add_mod_args(int nargs, const char *mod_name, char *args[])
@@ -823,9 +824,9 @@ static void parse_event(const char *msg, struct uevent *uevent)
         } else if(!strncmp(msg, "DEVNAME=", 8)) {
             msg += 8;
             uevent->device_name = msg;
-        } else if(!strncmp(msg, "TYPE=", 5)) {
-            msg += 5;
-            uevent->type = msg;
+	} else if(!strncmp(msg, "TYPE=", 5)) {
+	    msg += 5;
+	    uevent->type = msg;
         } else if (!strncmp(msg, "COUNTRY=", 8)) {
             msg += 8;
             uevent->country = msg;
@@ -1011,7 +1012,7 @@ static void handle_device(struct uevent *uevent,
 
     if(!strcmp(action, "add")) {
         make_device(uevent, devpath, block);
-        __system_property_set("ctl.dev_added",devpath);
+	__system_property_set("ctl.dev_added",devpath);
         if (links) {
             for (i = 0; links[i]; i++)
                 make_link(devpath, links[i]);
@@ -1177,7 +1178,7 @@ static void handle_generic_device_event(struct uevent *uevent)
      handle_device(uevent, devpath, 0, links);
 
      if (is_usb_dev)
-         handle_usb_device_class_rule(uevent, devpath);
+	handle_usb_device_class_rule(uevent, devpath);
 }
 
 int module_probe(const char *modalias)

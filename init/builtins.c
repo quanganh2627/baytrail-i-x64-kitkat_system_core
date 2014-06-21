@@ -53,8 +53,6 @@
 
 #include <private/android_filesystem_config.h>
 
-#define TIMEZONE "/data/property/persist.sys.timezone"
-
 #ifndef PROPERTY_VALUE_MAX
 #  define PROPERTY_VALUE_MAX 92
 #endif
@@ -62,6 +60,8 @@
 #ifndef PROPERTY_KEY_MAX
 #  define PROPERTY_KEY_MAX 32
 #endif
+
+#define TIMEZONE "/data/property/persist.sys.timezone"
 
 void add_environment(const char *name, const char *value);
 
