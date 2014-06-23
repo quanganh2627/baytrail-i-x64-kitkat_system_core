@@ -121,6 +121,7 @@ struct {
     { "selinux."         , AID_SYSTEM,   0 },
     { "AudioComms.",       AID_MEDIA,    0 },
     { "audiocomms.",       AID_MEDIA,    0 },
+    { "persist.",          AID_SYSTEM, 0   },
 #ifdef DOLBY_UDC
     { "dolby.audio",      AID_MEDIA,    0 },
 #endif // DOLBY_UDC
