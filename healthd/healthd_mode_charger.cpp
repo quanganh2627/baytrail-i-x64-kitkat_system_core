@@ -74,9 +74,9 @@ char *locale;
 #define LAST_KMSG_PSTORE_PATH   "/sys/fs/pstore/console-ramoops"
 #define LAST_KMSG_MAX_SZ        (32 * 1024)
 
-#define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
-#define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
-#define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
+//#define LOGE(x...) do { KLOG_ERROR("charger", x); } while (0)
+//#define LOGI(x...) do { KLOG_INFO("charger", x); } while (0)
+//#define LOGV(x...) do { KLOG_DEBUG("charger", x); } while (0)
 
 struct key_state {
     bool pending;
