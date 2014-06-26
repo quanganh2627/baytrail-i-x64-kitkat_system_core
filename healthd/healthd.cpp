@@ -31,6 +31,8 @@
 #include <cutils/uevent.h>
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
+// For wake lock
+#include "hardware_legacy/power.h"
 
 using namespace android;
 
@@ -96,6 +98,12 @@ static void battery_update(void) {
     // Fast wake interval when on charger (watch for overheat);
     // slow wake interval when on battery (watch for drained battery).
     struct BatteryProperties prop;
+
+    // we take the wakelock here because, with some of battery/charger/power-ic
+    // modules, getting battery status might take considerable time. And during
+    // this period need to avoid system suspend/resume cycles.
+    acquire_wake_lock(PARTIAL_WAKE_LOCK, HLTD_WAKE_LOCK);
+
     int new_wake_interval;
     int chg_online = gBatteryMonitor->update(prop);
 
@@ -124,6 +132,9 @@ static void battery_update(void) {
         awake_poll_interval =
             new_wake_interval == healthd_config.periodic_chores_interval_fast ?
                 -1 : healthd_config.periodic_chores_interval_fast * 1000;
+
+    // Release the wake lock
+    release_wake_lock(HLTD_WAKE_LOCK);
 }
 
 static void periodic_chores() {
