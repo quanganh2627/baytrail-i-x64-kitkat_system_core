@@ -79,7 +79,7 @@ char *mkmsg(const char *fmt, ...)
 
 typedef struct Action Action;
 
-#define CMD_SIZE 64
+#define CMD_SIZE 200
 
 struct Action
 {
