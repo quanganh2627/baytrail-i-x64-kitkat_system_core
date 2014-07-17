@@ -1036,7 +1036,7 @@ void device_init(void)
     }
 
     /* is 256K enough? udev uses 16MB! */
-    device_fd = uevent_open_socket(256*1024, true);
+    device_fd = uevent_open_socket(8 * 1024 * 1024, true);
     if(device_fd < 0)
         return;
 
