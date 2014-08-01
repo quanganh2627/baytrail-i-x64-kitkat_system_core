@@ -16,7 +16,7 @@
 
 //#define DEBUG_UEVENTS
 #define CHARGER_KLOG_LEVEL 6
-#define CHARGER_DISABLE_INIT_BLANK
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -867,15 +867,11 @@ static void update_screen_state(struct charger *charger, int64_t now)
 
         batt_anim->capacity = batt_cap;
     }
-#ifndef CHARGER_DISABLE_INIT_BLANK
+
     /* unblank the screen  on first cycle */
     if (batt_anim->cur_cycle == 0)
         gr_fb_blank(false);
-#else
-    LOGE("redraw_screen 1\n");
-    redraw_screen(charger);
-#endif
-    LOGE("redraw_screen 2\n");
+
     /* draw the new frame (@ cur_frame) */
     redraw_screen(charger);
 
