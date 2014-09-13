@@ -24,24 +24,14 @@ namespace android {
 
 struct NativeBridgeRuntimeCallbacks;
 
-// Open the native bridge, if any. Should be called by Runtime::Init(). A null library filename
-// signals that we do not want to load a native bridge.
-bool LoadNativeBridge(const char* native_bridge_library_filename,
-                      const NativeBridgeRuntimeCallbacks* runtime_callbacks);
-
-// Initialize the native bridge, if any. Should be called by Runtime::DidForkFromZygote.
-bool InitializeNativeBridge();
-
-// Unload the native bridge, if any. Should be called by Runtime::DidForkFromZygote.
-void UnloadNativeBridge();
-
-// Check whether a native bridge is available (opened or initialized). Requires a prior call to
-// LoadNativeBridge.
-bool NativeBridgeAvailable();
+// Initialize the native bridge, if any. Should be called by Runtime::Init().
+// A null library filename signals that we do not want to load a native bridge.
+void SetupNativeBridge(const char* native_bridge_library_filename,
+                       const NativeBridgeRuntimeCallbacks* runtime_callbacks);
 
 // Check whether a native bridge is available (initialized). Requires a prior call to
-// LoadNativeBridge & InitializeNativeBridge.
-bool NativeBridgeInitialized();
+// SetupNativeBridge to make sense.
+bool NativeBridgeAvailable();
 
 // Load a shared library that is supported by the native bridge.
 void* NativeBridgeLoadLibrary(const char* libpath, int flag);
