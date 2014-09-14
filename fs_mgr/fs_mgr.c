@@ -582,6 +582,13 @@ int fs_mgr_mount_all(struct fstab *fstab)
     }
 
     for (i = 0; i < fstab->num_entries; i++) {
+
+        if(access(fstab->recs[i].blk_device, 0))
+        {
+            ERROR("Could not find file %s\n", fstab->recs[i].blk_device);
+            continue;
+        }
+
         /* Don't mount entries that are managed by vold */
         if (fstab->recs[i].fs_mgr_flags & (MF_VOLDMANAGED | MF_RECOVERYONLY)) {
             continue;
