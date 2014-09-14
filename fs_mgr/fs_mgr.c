@@ -925,6 +925,10 @@ struct fstab_rec *fs_mgr_get_entry_for_mount_point(struct fstab *fstab, const ch
         int len = strlen(fstab->recs[i].mount_point);
         if (strncmp(path, fstab->recs[i].mount_point, len) == 0 &&
             (path[len] == '\0' || path[len] == '/')) {
+            if(access(fstab->recs[i].blk_device, 0)) {
+                ERROR("Could not find file %s\n", fstab->recs[i].blk_device);
+                continue;
+            }
             return &fstab->recs[i];
         }
     }
