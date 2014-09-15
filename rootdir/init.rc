@@ -290,7 +290,7 @@ on post-fs-data
     mkdir /data/property 0700 root root
 
     # create dalvik-cache, so as to enforce our permissions
-    mkdir /data/dalvik-cache 0771 system system
+    mkdir /data/dalvik-cache 0771 root root
     mkdir /data/dalvik-cache/profiles 0711 system system
 
     # create resource-cache and double-check the perms
@@ -429,7 +429,6 @@ on property:vold.decrypt=trigger_default_encryption
 on property:vold.decrypt=trigger_encryption
     start surfaceflinger
     start encrypt
-    class_start main
 
 on property:sys.init_log_level=*
     loglevel ${sys.init_log_level}
@@ -554,7 +553,7 @@ service ril-daemon /system/bin/rild
     group radio cache inet misc audio log
 
 service surfaceflinger /system/bin/surfaceflinger
-    class main
+    class core
     user system
     group graphics drmrpc
     onrestart restart zygote
@@ -585,7 +584,7 @@ service encrypt /system/bin/vdc --wait cryptfs enablecrypto inplace default
     # encryption)
 
 service bootanim /system/bin/bootanimation
-    class main
+    class core
     user graphics
     group graphics
     disabled
