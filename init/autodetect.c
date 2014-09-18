@@ -586,7 +586,7 @@ static void get_property_DEVICE(void)
 	char boardversion[PROP_VALUE_MAX];
 	char *c;
 
-	file = fopen("/sys/devices/virtual/dmi/id/product_name", "r");
+	file = fopen("/sys/devices/virtual/dmi/id/board_name", "r");
 	if (!file)
 		return;
 
@@ -607,7 +607,7 @@ static void get_property_DEVICE(void)
 		return;
 
 	memset(boardversion, 0, PROP_VALUE_MAX);
-	file = fopen("/sys/devices/virtual/dmi/id/product_version", "r");
+	file = fopen("/sys/devices/virtual/dmi/id/board_version", "r");
 	if (file) {
 		if (fgets(boardversion, PROP_VALUE_MAX, file) == NULL)
 			boardversion[0] = 0;
