@@ -67,6 +67,8 @@ char *locale;
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
+#define BOOT_BATT_MIN_CAP_THRS   0
+
 #define BATTERY_FULL_THRESH     95
 #define SCREEN_ON_BATTERY_THRESH 0
 
@@ -118,6 +120,7 @@ struct charger {
 
     struct animation *batt_anim;
     gr_surface surf_unknown;
+    int boot_min_cap;
 };
 
 static struct frame batt_anim_frames[] = {
@@ -530,8 +533,14 @@ static void process_key(struct charger *charger, int code, int64_t now)
                     LOGI("[%" PRId64 "] booting from charger mode\n", now);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
-                    LOGI("[%" PRId64 "] rebooting\n", now);
-                    android_reboot(ANDROID_RB_RESTART, 0, 0);
+                     if (get_battery_capacity() >= charger->boot_min_cap) {
+                         LOGI("[%" PRId64 "] rebooting\n", now);
+                         android_reboot(ANDROID_RB_RESTART, 0, 0);
+                     } else {
+                         LOGI("[%" PRId64 "] ignore power-button press, "
+                              "battery level less than minimum boot "
+                              "capacity (%d)\n", now, charger->boot_min_cap);
+                    }
                 }
             } else {
                 /* if the key is pressed but timeout hasn't expired,
@@ -675,6 +684,7 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
     struct charger *charger = &charger_state;
     int i;
     int epollfd;
+    char value[PROPERTY_VALUE_MAX], default_value[PROPERTY_VALUE_MAX];
 
     dump_last_kmsg();
 
@@ -713,6 +723,12 @@ void healthd_mode_charger_init(struct healthd_config* /*config*/)
     }
 
     ev_sync_key_state(set_key_callback, charger);
+
+    snprintf(default_value, PROPERTY_VALUE_MAX, "%d", BOOT_BATT_MIN_CAP_THRS);
+    property_get("ro.boot.min.cap", value, default_value);
+    sscanf(value, "%d", &charger->boot_min_cap);
+
+    LOGI("Minimum capacity for Android-boot %d\n", charger->boot_min_cap);
 
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
