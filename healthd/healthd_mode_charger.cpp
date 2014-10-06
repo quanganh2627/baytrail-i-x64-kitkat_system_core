@@ -67,6 +67,8 @@ char *locale;
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
+#define BOOT_BATT_MIN_CAP_THRS   0
+
 #define BATTERY_FULL_THRESH     95
 #define SCREEN_ON_BATTERY_THRESH 1
 
@@ -533,13 +535,13 @@ static void process_key(struct charger *charger, int code, int64_t now)
                     LOGI("[%" PRId64 "] booting from charger mode\n", now);
                     property_set("sys.boot_from_charger_mode", "1");
                 } else {
-                    if (get_battery_capacity() >= charger->boot_min_cap) {
-                        LOGI("[%" PRId64 "] rebooting\n", now);
-                        android_reboot(ANDROID_RB_RESTART, 0, 0);
-                    } else {
-                        LOGI("[%" PRId64 "] ignore power-button press, "
-                             "battery level less than minimum boot "
-                             "capacity (%d)\n", now, charger->boot_min_cap);
+                     if (get_battery_capacity() >= charger->boot_min_cap) {
+                         LOGI("[%" PRId64 "] rebooting\n", now);
+                         android_reboot(ANDROID_RB_RESTART, 0, 0);
+                     } else {
+                         LOGI("[%" PRId64 "] ignore power-button press, "
+                              "battery level less than minimum boot "
+                              "capacity (%d)\n", now, charger->boot_min_cap);
                     }
                 }
             } else {
