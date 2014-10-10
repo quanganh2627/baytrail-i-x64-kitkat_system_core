@@ -709,7 +709,9 @@ static int console_init_action(int nargs, char **args)
             "\n"
             "\n"
             "             A N D R O I D ";
+#if 0
             write(fd, msg, strlen(msg));
+#endif
             close(fd);
         }
     }
