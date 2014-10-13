@@ -16,6 +16,7 @@
 
 #ifndef _HEALTHD_H_
 #define _HEALTHD_H_
+#define HLTD_WAKE_LOCK "healthd_wake_lock"
 
 #include <batteryservice/BatteryService.h>
 #include <sys/types.h>
