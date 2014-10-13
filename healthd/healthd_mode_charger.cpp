@@ -70,7 +70,7 @@ char *locale;
 #define BOOT_BATT_MIN_CAP_THRS   0
 
 #define BATTERY_FULL_THRESH     95
-#define SCREEN_ON_BATTERY_THRESH 1
+#define SCREEN_ON_BATTERY_THRESH 0
 
 #define BOOT_BATT_MIN_CAP_THRS   0
 

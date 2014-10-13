@@ -22,12 +22,10 @@ static const char* kTestName = "librandom-bridge_not.existing.so";
 
 TEST_F(NativeBridgeTest, ValidName) {
     EXPECT_EQ(false, NativeBridgeError());
-    SetupNativeBridge(kTestName, nullptr);
-    EXPECT_EQ(false, NativeBridgeError());
-    EXPECT_EQ(false, NativeBridgeAvailable());
-    // This should lead to an error for trying to initialize a not-existing
-    // native bridge.
+    LoadNativeBridge(kTestName, nullptr);
+    // This will lead to an error as the library doesn't exist.
     EXPECT_EQ(true, NativeBridgeError());
+    EXPECT_EQ(false, NativeBridgeAvailable());
 }
 
 }  // namespace android

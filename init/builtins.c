@@ -478,7 +478,8 @@ static int wipe_data_via_recovery()
     mkdir("/cache/recovery", 0700);
     int fd = open("/cache/recovery/command", O_RDWR|O_CREAT|O_TRUNC, 0600);
     if (fd >= 0) {
-        write(fd, "--wipe_data", strlen("--wipe_data") + 1);
+        write(fd, "--wipe_data\n", strlen("--wipe_data\n") + 1);
+        write(fd, "--reason=wipe_data_via_recovery\n", strlen("--reason=wipe_data_via_recovery\n") + 1);
         close(fd);
     } else {
         ERROR("could not open /cache/recovery/command\n");
@@ -517,7 +518,12 @@ int do_mount_all(int nargs, char **args)
     pid = fork();
     if (pid > 0) {
         /* Parent.  Wait for the child to return */
-        waitpid(pid, &status, 0);
+        int wp_ret = TEMP_FAILURE_RETRY(waitpid(pid, &status, 0));
+        if (wp_ret < 0) {
+            /* Unexpected error code. We will continue anyway. */
+            NOTICE("waitpid failed rc=%d, errno=%d\n", wp_ret, errno);
+        }
+
         if (WIFEXITED(status)) {
             ret = WEXITSTATUS(status);
         } else {

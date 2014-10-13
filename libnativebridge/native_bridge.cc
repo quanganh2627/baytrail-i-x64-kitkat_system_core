@@ -16,21 +16,60 @@
 
 #include "nativebridge/native_bridge.h"
 
+#include <cstring>
 #include <cutils/log.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
-#include "utils/Mutex.h"
+#include <sys/mount.h>
+#include <sys/stat.h>
 
 
 namespace android {
 
-static Mutex native_bridge_lock("native bridge lock");
+// Environment values required by the apps running with native bridge.
+struct NativeBridgeRuntimeValues {
+    const char* os_arch;
+    const char* cpu_abi;
+    const char* cpu_abi2;
+    const char* *supported_abis;
+    int32_t abi_count;
+};
 
 // The symbol name exposed by native-bridge with the type of NativeBridgeCallbacks.
 static constexpr const char* kNativeBridgeInterfaceSymbol = "NativeBridgeItf";
 
-// The filename of the library we are supposed to load.
-static const char* native_bridge_library_filename = nullptr;
+enum class NativeBridgeState {
+  kNotSetup,                        // Initial state.
+  kOpened,                          // After successful dlopen.
+  kInitialized,                     // After successful initialization.
+  kClosed                           // Closed or errors.
+};
+
+static const char* kNotSetupString = "kNotSetup";
+static const char* kOpenedString = "kOpened";
+static const char* kInitializedString = "kInitialized";
+static const char* kClosedString = "kClosed";
+
+static const char* GetNativeBridgeStateString(NativeBridgeState state) {
+  switch (state) {
+    case NativeBridgeState::kNotSetup:
+      return kNotSetupString;
+
+    case NativeBridgeState::kOpened:
+      return kOpenedString;
+
+    case NativeBridgeState::kInitialized:
+      return kInitializedString;
+
+    case NativeBridgeState::kClosed:
+      return kClosedString;
+  }
+}
+
+// Current state of the native bridge.
+static NativeBridgeState state = NativeBridgeState::kNotSetup;
 
 // Whether a native bridge is available (loaded and ready).
 static bool available = false;
@@ -39,8 +78,17 @@ static bool initialized = false;
 // Whether we had an error at some point.
 static bool had_error = false;
 
+// Handle of the loaded library.
+static void* native_bridge_handle = nullptr;
+// Pointer to the callbacks. Available as soon as LoadNativeBridge succeeds, but only initialized
+// later.
 static NativeBridgeCallbacks* callbacks = nullptr;
 static const NativeBridgeRuntimeCallbacks* runtime_callbacks = nullptr;
+
+// The app's data directory.
+static char* app_data_dir = nullptr;
+
+static constexpr uint32_t kNativeBridgeCallbackVersion = 1;
 
 // Characters allowed in a native bridge filename. The first character must
 // be in [a-zA-Z] (expected 'l' for "libx"). The rest must be in [a-zA-Z0-9._-].
@@ -83,13 +131,20 @@ bool NativeBridgeNameAcceptable(const char* nb_library_filename) {
   }
 }
 
-void SetupNativeBridge(const char* nb_library_filename,
-                       const NativeBridgeRuntimeCallbacks* runtime_cbs) {
-  Mutex::Autolock auto_lock(native_bridge_lock);
+static bool VersionCheck(NativeBridgeCallbacks* cb) {
+  return cb != nullptr && cb->version == kNativeBridgeCallbackVersion;
+}
 
+bool LoadNativeBridge(const char* nb_library_filename,
+                      const NativeBridgeRuntimeCallbacks* runtime_cbs) {
+  // We expect only one place that calls LoadNativeBridge: Runtime::Init. At that point we are not
+  // multi-threaded, so we do not need locking here.
   if (initialized || native_bridge_library_filename != nullptr) {
     // Setup has been called before. Ignore this call.
-    ALOGW("Called SetupNativeBridge for an already set up native bridge.");
+    if (nb_library_filename != nullptr) {  // Avoids some log-spam for dalvikvm.
+      ALOGW("Called LoadNativeBridge for an already set up native bridge. State is %s.",
+            GetNativeBridgeStateString(state));
+    }
     // Note: counts as an error, even though the bridge may be functional.
     had_error = true;
     return;
@@ -109,6 +164,35 @@ void SetupNativeBridge(const char* nb_library_filename,
       available = false;
       initialized = true;
       had_error = true;
+    } else {
+      // Try to open the library.
+      void* handle = dlopen(nb_library_filename, RTLD_LAZY);
+      if (handle != nullptr) {
+        callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
+                                                                   kNativeBridgeInterfaceSymbol));
+        if (callbacks != nullptr) {
+          if (VersionCheck(callbacks)) {
+            // Store the handle for later.
+            native_bridge_handle = handle;
+          } else {
+            callbacks = nullptr;
+            dlclose(handle);
+            ALOGW("Unsupported native bridge interface.");
+          }
+        } else {
+          dlclose(handle);
+        }
+      }
+
+      // Two failure conditions: could not find library (dlopen failed), or could not find native
+      // bridge interface (dlsym failed). Both are an error and close the native bridge.
+      if (callbacks == nullptr) {
+        had_error = true;
+        state = NativeBridgeState::kClosed;
+      } else {
+        runtime_callbacks = runtime_cbs;
+        state = NativeBridgeState::kOpened;
+      }
     }
 
     if (!initialized) {
@@ -118,20 +202,225 @@ void SetupNativeBridge(const char* nb_library_filename,
   }
 }
 
-static bool NativeBridgeInitialize() {
-  Mutex::Autolock auto_lock(native_bridge_lock);
+#if defined(__arm__)
+static const char* kRuntimeISA = "arm";
+#elif defined(__aarch64__)
+static const char* kRuntimeISA = "arm64";
+#elif defined(__mips__)
+static const char* kRuntimeISA = "mips";
+#elif defined(__i386__)
+static const char* kRuntimeISA = "x86";
+#elif defined(__x86_64__)
+static const char* kRuntimeISA = "x86_64";
+#else
+static const char* kRuntimeISA = "unknown";
+#endif
 
-  if (initialized) {
-    // Somebody did it before.
-    return available;
+
+bool NeedsNativeBridge(const char* instruction_set) {
+  if (instruction_set == nullptr) {
+    ALOGE("Null instruction set in NeedsNativeBridge.");
+    return false;
+  }
+  return strncmp(instruction_set, kRuntimeISA, strlen(kRuntimeISA) + 1) != 0;
+}
+
+#ifdef __APPLE__
+template<typename T> void UNUSED(const T&) {}
+#endif
+
+void PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruction_set) {
+  if (app_data_dir_in == nullptr) {
+    return;
   }
 
-  available = false;
+  const size_t len = strlen(app_data_dir_in);
+  // Make a copy for us.
+  app_data_dir = new char[len];
+  strncpy(app_data_dir, app_data_dir_in, len);
 
-  if (native_bridge_library_filename == nullptr) {
-    // Called initialize without setup. dlopen has special semantics for nullptr input.
-    // So just call it a day here. This counts as an error.
-    initialized = true;
+#ifndef __APPLE__
+  if (instruction_set == nullptr) {
+    return;
+  }
+  size_t isa_len = strlen(instruction_set);
+  if (isa_len > 10) {
+    // 10 is a loose upper bound on the currently known instruction sets (a tight bound is 7 for
+    // x86_64 [including the trailing \0]). This is so we don't have to change here if there will
+    // be another instruction set in the future.
+    ALOGW("Instruction set %s is malformed, must be less than or equal to 10 characters.",
+          instruction_set);
+    return;
+  }
+
+  // Bind-mount /system/lib{,64}/<isa>/cpuinfo to /proc/cpuinfo. If the file does not exist, the
+  // mount command will fail, so we safe the extra file existence check...
+  char cpuinfo_path[1024];
+
+#ifdef HAVE_ANDROID_OS
+  snprintf(cpuinfo_path, sizeof(cpuinfo_path), "/system/lib"
+#ifdef __LP64__
+      "64"
+#endif  // __LP64__
+      "/%s/cpuinfo", instruction_set);
+#else   // !HAVE_ANDROID_OS
+  // To be able to test on the host, we hardwire a relative path.
+  snprintf(cpuinfo_path, sizeof(cpuinfo_path), "./cpuinfo");
+#endif
+
+  // Bind-mount.
+  if (TEMP_FAILURE_RETRY(mount(cpuinfo_path,        // Source.
+                               "/proc/cpuinfo",     // Target.
+                               nullptr,             // FS type.
+                               MS_BIND,             // Mount flags: bind mount.
+                               nullptr)) == -1) {   // "Data."
+    ALOGW("Failed to bind-mount %s as /proc/cpuinfo: %s", cpuinfo_path, strerror(errno));
+  }
+#else
+  UNUSED(instruction_set);
+  ALOGW("Mac OS does not support bind-mounting. Host simulation of native bridge impossible.");
+#endif
+}
+
+static void SetCpuAbi(JNIEnv* env, jclass build_class, const char* field, const char* value) {
+  if (value != nullptr) {
+    jfieldID field_id = env->GetStaticFieldID(build_class, field, "Ljava/lang/String;");
+    if (field_id == nullptr) {
+      env->ExceptionClear();
+      ALOGW("Could not find %s field.", field);
+      return;
+    }
+
+    jstring str = env->NewStringUTF(value);
+    if (str == nullptr) {
+      env->ExceptionClear();
+      ALOGW("Could not create string %s.", value);
+      return;
+    }
+
+    env->SetStaticObjectField(build_class, field_id, str);
+  }
+}
+
+static void SetSupportedAbis(JNIEnv* env, jclass build_class, const char* field,
+                             const char* *values, int32_t value_count) {
+  if (value_count < 0) {
+    return;
+  }
+  if (values == nullptr && value_count > 0) {
+    ALOGW("More than zero values expected: %d.", value_count);
+    return;
+  }
+
+  jfieldID field_id = env->GetStaticFieldID(build_class, field, "[Ljava/lang/String;");
+  if (field_id != nullptr) {
+    // Create the array.
+    jobjectArray array = env->NewObjectArray(value_count, env->FindClass("java/lang/String"),
+                                             nullptr);
+    if (array == nullptr) {
+      env->ExceptionClear();
+      ALOGW("Could not create array.");
+      return;
+    }
+
+    // Fill the array.
+    for (int32_t i = 0; i < value_count; i++) {
+      jstring str = env->NewStringUTF(values[i]);
+      if (str == nullptr) {
+        env->ExceptionClear();
+        ALOGW("Could not create string %s.", values[i]);
+        return;
+      }
+
+      env->SetObjectArrayElement(array, i, str);
+    }
+
+    env->SetStaticObjectField(build_class, field_id, array);
+  } else {
+    env->ExceptionClear();
+    ALOGW("Could not find %s field.", field);
+  }
+}
+
+// Set up the environment for the bridged app.
+static void SetupEnvironment(NativeBridgeCallbacks* callbacks, JNIEnv* env, const char* isa) {
+  // Need a JNIEnv* to do anything.
+  if (env == nullptr) {
+    ALOGW("No JNIEnv* to set up app environment.");
+    return;
+  }
+
+  // Query the bridge for environment values.
+  const struct NativeBridgeRuntimeValues* env_values = callbacks->getAppEnv(isa);
+  if (env_values == nullptr) {
+    return;
+  }
+
+  // Keep the JNIEnv clean.
+  jint success = env->PushLocalFrame(16);  // That should be small and large enough.
+  if (success < 0) {
+    // Out of memory, really borked.
+    ALOGW("Out of memory while setting up app environment.");
+    env->ExceptionClear();
+    return;
+  }
+
+  // Reset CPU_ABI & CPU_ABI2 to values required by the apps running with native bridge.
+  if (env_values->cpu_abi != nullptr || env_values->cpu_abi2 != nullptr ||
+      env_values->abi_count >= 0) {
+    jclass bclass_id = env->FindClass("android/os/Build");
+    if (bclass_id != nullptr) {
+      SetCpuAbi(env, bclass_id, "CPU_ABI", env_values->cpu_abi);
+      SetCpuAbi(env, bclass_id, "CPU_ABI2", env_values->cpu_abi2);
+
+      SetSupportedAbis(env, bclass_id, "SUPPORTED_ABIS", env_values->supported_abis,
+                       env_values->abi_count);
+    } else {
+      // For example in a host test environment.
+      env->ExceptionClear();
+      ALOGW("Could not find Build class.");
+    }
+  }
+
+  if (env_values->os_arch != nullptr) {
+    jclass sclass_id = env->FindClass("java/lang/System");
+    if (sclass_id != nullptr) {
+      jmethodID set_prop_id = env->GetStaticMethodID(sclass_id, "setProperty",
+          "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+      if (set_prop_id != nullptr) {
+        // Reset os.arch to the value reqired by the apps running with native bridge.
+        env->CallStaticObjectMethod(sclass_id, set_prop_id, env->NewStringUTF("os.arch"),
+            env->NewStringUTF(env_values->os_arch));
+      } else {
+        env->ExceptionClear();
+        ALOGW("Could not find setProperty method.");
+      }
+    } else {
+      env->ExceptionClear();
+      ALOGW("Could not find System class.");
+    }
+  }
+
+  // Make it pristine again.
+  env->PopLocalFrame(nullptr);
+}
+
+bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
+  // We expect only one place that calls InitializeNativeBridge: Runtime::DidForkFromZygote. At that
+  // point we are not multi-threaded, so we do not need locking here.
+
+  if (state == NativeBridgeState::kOpened) {
+    // Try to initialize.
+    if (callbacks->initialize(runtime_callbacks, app_data_dir, instruction_set)) {
+      SetupEnvironment(callbacks, env, instruction_set);
+      state = NativeBridgeState::kInitialized;
+    } else {
+      // Unload the library.
+      dlclose(native_bridge_handle);
+      had_error = true;
+      state = NativeBridgeState::kClosed;
+    }
+  } else {
     had_error = true;
     return false;
   }
@@ -141,18 +430,21 @@ static bool NativeBridgeInitialize() {
     callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
                                                                kNativeBridgeInterfaceSymbol));
 
-    if (callbacks != nullptr) {
-      available = callbacks->initialize(runtime_callbacks);
-    }
+  switch(state) {
+    case NativeBridgeState::kOpened:
+    case NativeBridgeState::kInitialized:
+      // Unload.
+      dlclose(native_bridge_handle);
+      break;
 
     if (!available) {
       // If we fail initialization, this counts as an error.
       had_error = true;
-      dlclose(handle);
-    }
-  } else {
-    // Being unable to open the library counts as an error.
-    had_error = true;
+      break;
+
+    case NativeBridgeState::kClosed:
+      // Ignore.
+      break;
   }
 
   initialized = true;

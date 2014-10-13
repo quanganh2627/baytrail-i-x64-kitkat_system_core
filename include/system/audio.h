@@ -111,7 +111,8 @@ enum {
     AUDIO_FLAG_SECURE              = 0x2,
     AUDIO_FLAG_SCO                 = 0x4,
     AUDIO_FLAG_BEACON              = 0x8,
-    AUDIO_FLAG_HW_AV_SYNC          = 0x10
+    AUDIO_FLAG_HW_AV_SYNC          = 0x10,
+    AUDIO_FLAG_HW_HOTWORD          = 0x20,
 };
 
 /* Do not change these values without updating their counterparts
@@ -403,6 +404,8 @@ enum {
     AUDIO_CHANNEL_IN_MONO   = AUDIO_CHANNEL_IN_FRONT,
     AUDIO_CHANNEL_IN_STEREO = (AUDIO_CHANNEL_IN_LEFT | AUDIO_CHANNEL_IN_RIGHT),
     AUDIO_CHANNEL_IN_FRONT_BACK = (AUDIO_CHANNEL_IN_FRONT | AUDIO_CHANNEL_IN_BACK),
+    AUDIO_CHANNEL_IN_VOICE_UPLINK_DNLINK = (AUDIO_CHANNEL_IN_VOICE_UPLINK |
+                                            AUDIO_CHANNEL_IN_VOICE_DNLINK),
     AUDIO_CHANNEL_IN_ALL    = (AUDIO_CHANNEL_IN_LEFT |
                                AUDIO_CHANNEL_IN_RIGHT |
                                AUDIO_CHANNEL_IN_FRONT |
@@ -585,6 +588,8 @@ enum {
     AUDIO_DEVICE_OUT_FM                        = 0x100000,
     /* Line out for av devices */
     AUDIO_DEVICE_OUT_AUX_LINE                  = 0x200000,
+    /* limited-output speaker device for acoustic safety */
+    AUDIO_DEVICE_OUT_SPEAKER_SAFE              = 0x400000,
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_WIDI                      = 0x1000000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
@@ -609,6 +614,7 @@ enum {
                                  AUDIO_DEVICE_OUT_SPDIF |
                                  AUDIO_DEVICE_OUT_FM |
                                  AUDIO_DEVICE_OUT_AUX_LINE |
+                                 AUDIO_DEVICE_OUT_SPEAKER_SAFE |
                                  AUDIO_DEVICE_OUT_DEFAULT),
     AUDIO_DEVICE_OUT_ALL_A2DP = (AUDIO_DEVICE_OUT_BLUETOOTH_A2DP |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
@@ -708,8 +714,9 @@ typedef enum {
  * attributes corresponding to the specified flags.
  */
 typedef enum {
-    AUDIO_INPUT_FLAG_NONE = 0x0,        // no attributes
-    AUDIO_INPUT_FLAG_FAST = 0x1,        // prefer an input that supports "fast tracks"
+    AUDIO_INPUT_FLAG_NONE       = 0x0,  // no attributes
+    AUDIO_INPUT_FLAG_FAST       = 0x1,  // prefer an input that supports "fast tracks"
+    AUDIO_INPUT_FLAG_HW_HOTWORD = 0x2,  // prefer an input that captures from hw hotword source
 } audio_input_flags_t;
 
 /* Additional information about compressed streams offloaded to
