@@ -71,10 +71,6 @@ static const char* GetNativeBridgeStateString(NativeBridgeState state) {
 // Current state of the native bridge.
 static NativeBridgeState state = NativeBridgeState::kNotSetup;
 
-// Whether a native bridge is available (loaded and ready).
-static bool available = false;
-// Whether we have already initialized (or tried to).
-static bool initialized = false;
 // Whether we had an error at some point.
 static bool had_error = false;
 
@@ -83,6 +79,7 @@ static void* native_bridge_handle = nullptr;
 // Pointer to the callbacks. Available as soon as LoadNativeBridge succeeds, but only initialized
 // later.
 static NativeBridgeCallbacks* callbacks = nullptr;
+// Callbacks provided by the environment to the bridge. Passed to LoadNativeBridge.
 static const NativeBridgeRuntimeCallbacks* runtime_callbacks = nullptr;
 
 // The app's data directory.
@@ -139,7 +136,8 @@ bool LoadNativeBridge(const char* nb_library_filename,
                       const NativeBridgeRuntimeCallbacks* runtime_cbs) {
   // We expect only one place that calls LoadNativeBridge: Runtime::Init. At that point we are not
   // multi-threaded, so we do not need locking here.
-  if (initialized || native_bridge_library_filename != nullptr) {
+
+  if (state != NativeBridgeState::kNotSetup) {
     // Setup has been called before. Ignore this call.
     if (nb_library_filename != nullptr) {  // Avoids some log-spam for dalvikvm.
       ALOGW("Called LoadNativeBridge for an already set up native bridge. State is %s.",
@@ -147,22 +145,15 @@ bool LoadNativeBridge(const char* nb_library_filename,
     }
     // Note: counts as an error, even though the bridge may be functional.
     had_error = true;
-    return;
+    return false;
   }
 
-  runtime_callbacks = runtime_cbs;
-
-  if (nb_library_filename == nullptr) {
-    available = false;
-    initialized = true;
+  if (nb_library_filename == nullptr || *nb_library_filename == 0) {
+    state = NativeBridgeState::kClosed;
+    return true;
   } else {
-    // Check whether it's an empty string.
-    if (*nb_library_filename == 0) {
-      available = false;
-      initialized = true;
-    } else if (!NativeBridgeNameAcceptable(nb_library_filename)) {
-      available = false;
-      initialized = true;
+    if (!NativeBridgeNameAcceptable(nb_library_filename)) {
+      state = NativeBridgeState::kClosed;
       had_error = true;
     } else {
       // Try to open the library.
@@ -194,11 +185,7 @@ bool LoadNativeBridge(const char* nb_library_filename,
         state = NativeBridgeState::kOpened;
       }
     }
-
-    if (!initialized) {
-      // Didn't find a name error or empty string, assign it.
-      native_bridge_library_filename = nb_library_filename;
-    }
+    return state == NativeBridgeState::kOpened;
   }
 }
 
@@ -385,15 +372,15 @@ static void SetupEnvironment(NativeBridgeCallbacks* callbacks, JNIEnv* env, cons
   if (env_values->os_arch != nullptr) {
     jclass sclass_id = env->FindClass("java/lang/System");
     if (sclass_id != nullptr) {
-      jmethodID set_prop_id = env->GetStaticMethodID(sclass_id, "setProperty",
-          "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
+      jmethodID set_prop_id = env->GetStaticMethodID(sclass_id, "initUnchangeableSystemProperty",
+          "(Ljava/lang/String;Ljava/lang/String;)V");
       if (set_prop_id != nullptr) {
-        // Reset os.arch to the value reqired by the apps running with native bridge.
-        env->CallStaticObjectMethod(sclass_id, set_prop_id, env->NewStringUTF("os.arch"),
+        // Init os.arch to the value reqired by the apps running with native bridge.
+        env->CallStaticVoidMethod(sclass_id, set_prop_id, env->NewStringUTF("os.arch"),
             env->NewStringUTF(env_values->os_arch));
       } else {
         env->ExceptionClear();
-        ALOGW("Could not find setProperty method.");
+        ALOGW("Could not find initUnchangeableSystemProperty method.");
       }
     } else {
       env->ExceptionClear();
@@ -422,13 +409,15 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
     }
   } else {
     had_error = true;
-    return false;
+    state = NativeBridgeState::kClosed;
   }
 
-  void* handle = dlopen(native_bridge_library_filename, RTLD_LAZY);
-  if (handle != nullptr) {
-    callbacks = reinterpret_cast<NativeBridgeCallbacks*>(dlsym(handle,
-                                                               kNativeBridgeInterfaceSymbol));
+  return state == NativeBridgeState::kInitialized;
+}
+
+void UnloadNativeBridge() {
+  // We expect only one place that calls UnloadNativeBridge: Runtime::DidForkFromZygote. At that
+  // point we are not multi-threaded, so we do not need locking here.
 
   switch(state) {
     case NativeBridgeState::kOpened:
@@ -437,8 +426,8 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
       dlclose(native_bridge_handle);
       break;
 
-    if (!available) {
-      // If we fail initialization, this counts as an error.
+    case NativeBridgeState::kNotSetup:
+      // Not even set up. Error.
       had_error = true;
       break;
 
@@ -447,9 +436,7 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
       break;
   }
 
-  initialized = true;
-
-  return available;
+  state = NativeBridgeState::kClosed;
 }
 
 bool NativeBridgeError() {
@@ -457,11 +444,17 @@ bool NativeBridgeError() {
 }
 
 bool NativeBridgeAvailable() {
-  return NativeBridgeInitialize();
+  return state == NativeBridgeState::kOpened || state == NativeBridgeState::kInitialized;
+}
+
+bool NativeBridgeInitialized() {
+  // Calls of this are supposed to happen in a state where the native bridge is stable, i.e., after
+  // Runtime::DidForkFromZygote. In that case we do not need a lock.
+  return state == NativeBridgeState::kInitialized;
 }
 
 void* NativeBridgeLoadLibrary(const char* libpath, int flag) {
-  if (NativeBridgeInitialize()) {
+  if (NativeBridgeInitialized()) {
     return callbacks->loadLibrary(libpath, flag);
   }
   return nullptr;
@@ -469,14 +462,14 @@ void* NativeBridgeLoadLibrary(const char* libpath, int flag) {
 
 void* NativeBridgeGetTrampoline(void* handle, const char* name, const char* shorty,
                                 uint32_t len) {
-  if (NativeBridgeInitialize()) {
+  if (NativeBridgeInitialized()) {
     return callbacks->getTrampoline(handle, name, shorty, len);
   }
   return nullptr;
 }
 
 bool NativeBridgeIsSupported(const char* libpath) {
-  if (NativeBridgeInitialize()) {
+  if (NativeBridgeInitialized()) {
     return callbacks->isSupported(libpath);
   }
   return false;
