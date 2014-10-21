@@ -1407,7 +1407,7 @@ static int handle_init(struct fuse* fuse, struct fuse_handler* handler,
     out.major = FUSE_KERNEL_VERSION;
     out.minor = FUSE_KERNEL_MINOR_VERSION;
     out.max_readahead = req->max_readahead;
-    out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES;
+    out.flags = FUSE_ATOMIC_O_TRUNC | FUSE_BIG_WRITES | FUSE_ASYNC_READ;
     out.max_background = 32;
     out.congestion_threshold = 32;
     out.max_write = MAX_WRITE;
