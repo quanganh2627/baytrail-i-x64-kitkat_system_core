@@ -172,6 +172,7 @@ jdwp_process_free( JdwpProcess*  proc )
 
         if (proc->fde != NULL) {
             fdevent_destroy(proc->fde);
+            free(proc->fde);
             proc->fde = NULL;
         }
         proc->pid = -1;
