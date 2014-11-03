@@ -116,7 +116,7 @@ uninflate(unsigned char* out, int unlen, const unsigned char* in, int clen)
 static int
 uninflate_to_file(FILE* dest, const unsigned char* in, int clen)
 {
-    z_stream zstream;;
+    z_stream zstream;
     int zerr;
     unsigned have;
     unsigned char out_chk[CHUNK_SIZE];
@@ -125,8 +125,8 @@ uninflate_to_file(FILE* dest, const unsigned char* in, int clen)
     zstream.zalloc = Z_NULL;
     zstream.zfree = Z_NULL;
     zstream.opaque = Z_NULL;
-    zstream.next_in = Z_NULL;
-    zstream.avail_in = 0;
+    zstream.avail_in = clen;
+    zstream.next_in = (void*)in;
 
     // Use the undocumented "negative window bits" feature to tell zlib
     // that there's no zlib header waiting for it.
@@ -136,8 +136,6 @@ uninflate_to_file(FILE* dest, const unsigned char* in, int clen)
     }
 
     // run inflate() on input until output buffer not full
-    zstream.avail_in = clen;
-    zstream.next_in = (void*)in;
     do {
         zstream.avail_out = CHUNK_SIZE;
         zstream.next_out = out_chk;
@@ -149,17 +147,17 @@ uninflate_to_file(FILE* dest, const unsigned char* in, int clen)
             case Z_MEM_ERROR:
                 inflateEnd(&zstream);
             case Z_STREAM_ERROR:
-                fprintf(stderr, "uninflate_to_file inflate error zerr=%d \n", zerr);
+                fprintf(stderr, "uninflate_to_file inflate error zerr=%d\n", zerr);
                 return -1;
         }
         have = CHUNK_SIZE - zstream.avail_out;
-        if (fwrite(out_chk, 1, have, dest) != have || ferror(dest)) {
+        if (fwrite(out_chk, 1, have, dest) != have) {
             inflateEnd(&zstream);
             return -1;
         }
     } while (zstream.avail_out == 0);
 
-    // clean up and return 
+    // clean up and return
     inflateEnd(&zstream);
     return 0;
 }
@@ -188,7 +186,10 @@ decompress_zipentry_to_file(zipentry_t e, FILE* dest)
     switch (entry->compressionMethod)
     {
         case STORED:
-            return !(fwrite(entry->data, 1, entry->uncompressedSize, dest));
+            if (fwrite(entry->data, 1, entry->uncompressedSize, dest) !=
+                entry->uncompressedSize)
+                return -1;
+            return 0;
         case DEFLATED:
             return uninflate_to_file(dest, entry->data, entry->compressedSize);
         default:
