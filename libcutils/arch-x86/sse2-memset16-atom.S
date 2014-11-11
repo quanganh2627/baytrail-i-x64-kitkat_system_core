@@ -340,9 +340,9 @@ L(aligned_16_less128bytes):
 
 	ALIGN (4)
 L(128bytesormore):
-#ifdef SHARED_CACHE_SIZE
+#ifdef DATA_CACHE_SIZE_HALF
 	PUSH (%ebx)
-	mov	$SHARED_CACHE_SIZE, %ebx
+	mov	$DATA_CACHE_SIZE_HALF, %ebx
 #else
 # ifdef SHARED
 	call	__i686.get_pc_thunk.bx
@@ -442,14 +442,14 @@ L(128bytesormore_shared_cache_loop):
 	prefetcht0	0x3c0(%edx)
 	prefetcht0	0x380(%edx)
 	sub	$0x80, %ebx
-	movdqa	%xmm0, (%edx)
-	movdqa	%xmm0, 0x10(%edx)
-	movdqa	%xmm0, 0x20(%edx)
-	movdqa	%xmm0, 0x30(%edx)
-	movdqa	%xmm0, 0x40(%edx)
-	movdqa	%xmm0, 0x50(%edx)
-	movdqa	%xmm0, 0x60(%edx)
-	movdqa	%xmm0, 0x70(%edx)
+	movntdq	%xmm0, (%edx)
+	movntdq	%xmm0, 0x10(%edx)
+	movntdq	%xmm0, 0x20(%edx)
+	movntdq	%xmm0, 0x30(%edx)
+	movntdq	%xmm0, 0x40(%edx)
+	movntdq	%xmm0, 0x50(%edx)
+	movntdq	%xmm0, 0x60(%edx)
+	movntdq	%xmm0, 0x70(%edx)
 	add	$0x80, %edx
 	cmp	$0x80, %ebx
 	jae	L(128bytesormore_shared_cache_loop)
@@ -471,6 +471,7 @@ L(128bytesormore_nt):
 	jae	L(128bytesormore_nt)
 	sfence
 L(shared_cache_loop_end):
+        sfence
 #if defined DATA_CACHE_SIZE || !defined SHARED
 	POP (%ebx)
 #endif
