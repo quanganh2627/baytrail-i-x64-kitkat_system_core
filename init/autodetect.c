@@ -745,6 +745,7 @@ static void create_fingerprint(void)
 	char original[PATH_MAX];
 	char *clientid = NULL;
 	char *s = NULL;
+	original[0] = 0;
 
 	/* we are usually in the Android OS */
 	file = fopen("/system/build.prop", "r");
