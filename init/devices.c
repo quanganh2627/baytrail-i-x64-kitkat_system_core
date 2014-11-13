@@ -914,8 +914,6 @@ static int load_firmware(int fw_fd, int loading_fd, int data_fd)
         return -1;
     len_to_copy = st.st_size;
 
-    write(loading_fd, "1", 1);  /* start transfer */
-
     while (len_to_copy > 0) {
         char buf[PAGE_SIZE];
         ssize_t nr;
@@ -1042,6 +1040,10 @@ root_free_out:
 static void handle_firmware_event(struct uevent *uevent)
 {
     pid_t pid;
+    char *loading_path;
+    int fd;
+    char c;
+
     int ret;
 
     if(strcmp(uevent->subsystem, "firmware"))
@@ -1049,6 +1051,44 @@ static void handle_firmware_event(struct uevent *uevent)
 
     if(strcmp(uevent->action, "add"))
         return;
+    ret = asprintf(&loading_path, SYSFS_PREFIX"%s/loading", uevent->path);
+    if (ret == -1) {
+        ERROR("%s: Loading path allocation failed\n", __func__);
+        return;
+    }
+
+    /* If a uevent is received during the sysfs scan, this function might be
+     * called to handle the same firmware twice.
+     * Since process_firmware_event is called from a forked process, the two
+     * forked processes might race against each other.
+     * Unfortunately, waiting for the processes to exit may deadlock, so work
+     * around this by using the loading sysfs file as a mutex.
+     */
+    fd = open(loading_path, O_RDWR);
+    free(loading_path);
+    if (fd < 0) {
+        ERROR("%s: Loading file open failed\n", __func__);
+        return;
+    }
+
+    ret = read(fd, &c, 1);
+    if (ret <= 0 || c != '0') {
+        close(fd);
+        ERROR("%s: Read failed or already in progress\n", __func__);
+        return;
+    }
+
+    ret = write(fd, "1", 1);
+    if (ret <= 0) {
+        close(fd);
+        ERROR("%s: Loading file write failed\n", __func__);
+        return;
+    }
+
+    /* For simplicity, instead of passing the loading fd, just reopen it in the
+     * child process
+     */
+    close(fd);
 
     /* we fork, to avoid making large memory allocations in init proper */
     pid = fork();
