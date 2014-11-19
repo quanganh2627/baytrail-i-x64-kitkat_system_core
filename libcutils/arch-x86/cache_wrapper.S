@@ -18,7 +18,7 @@
  */
 
 /* Values are optimized for Atom */
-#define SHARED_CACHE_SIZE       (512*1024)            /* Atom L2 Cache */
-#define DATA_CACHE_SIZE         (24*1024)             /* Atom L1 Data Cache */
+#define SHARED_CACHE_SIZE       (256*1024)            /* Atom L2 Cache */
+#define DATA_CACHE_SIZE         (8*1024)             /* Atom L1 Data Cache */
 #define SHARED_CACHE_SIZE_HALF  (SHARED_CACHE_SIZE / 2)
 #define DATA_CACHE_SIZE_HALF    (DATA_CACHE_SIZE / 2)
