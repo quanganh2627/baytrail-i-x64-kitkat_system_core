@@ -396,7 +396,8 @@ static int get_edid_dpi(void)
 #define _PROP_DEVICE 2
 #define _PROP_BOOTLOADER 3
 #define _PROP_SERIAL 4
-static char cached_properties[5][PROP_VALUE_MAX];
+#define _PROP_MODEL 5
+static char cached_properties[6][PROP_VALUE_MAX];
 
 static void CDD_clean_string(char *buf)
 {
@@ -699,6 +700,45 @@ static void get_property_SERIAL(void)
     }
 }
 
+static void get_property_MODEL(void)
+{
+	/* CDD leaves the ro.product.model field free form but it must not
+	 * be empty.  IRDA is working with IBV's to have them put their
+	 * human-pretty marketing name in the DMI field "board_name1".  If
+	 * that non-standard DMI field is empty, the IBV messed up.  In
+	 * that case just fall back to _PROP_DEVICE, which was set by an
+	 * earlier call to get_property_DEVICE().
+	 */
+	FILE *file;
+	char buf[PROP_VALUE_MAX];
+	char *c;
+
+	file = fopen("/sys/devices/virtual/dmi/id/board_name1", "r");
+	if (!file)
+		goto fallback;
+
+	memset(buf, 0, PROP_VALUE_MAX);
+	if (fgets(buf, PROP_VALUE_MAX, file) == NULL) {
+		fclose(file);
+		goto fallback;
+	}
+
+	fclose(file);
+	c = strchr(buf, '\n');
+	if (c)
+		*c = 0;
+
+	if (strlen(buf) != 0) {
+		/* use the IBV's "board_name1" value */
+		strncpy(cached_properties[_PROP_MODEL], buf, PROP_VALUE_MAX);
+		return;
+	}
+
+fallback:
+	/* fallback to value previously set by get_property_DEVICE() */
+	strncpy(cached_properties[_PROP_MODEL], cached_properties[_PROP_DEVICE], PROP_VALUE_MAX);
+}
+
 static void load_properties_from_dmi(void)
 {
     /* Read vendor from DMI and sanitize */
@@ -716,6 +756,8 @@ static void load_properties_from_dmi(void)
     /* Seek out and sanitize serial number */
     get_property_SERIAL();
 
+    /* Read and sanitize OEM's model string */
+    get_property_MODEL();
 }
 
 /* NOTE: this function should only be called on a non-qualified BIOS instance
@@ -790,12 +832,13 @@ static void create_fingerprint(void)
 
 	property_set("ro.product.device", cached_properties[_PROP_DEVICE]);
 	property_set("ro.build.product", cached_properties[_PROP_DEVICE]);
-	property_set("ro.product.model", cached_properties[_PROP_DEVICE]);
 	property_set("ro.product.board", cached_properties[_PROP_DEVICE]);
 	property_set("ro.board.platform", cached_properties[_PROP_DEVICE]);
 
 	sprintf(fingerprint, "%s/%s/%s%s", cached_properties[_PROP_BRAND], cached_properties[_PROP_NAME], cached_properties[_PROP_DEVICE], c);
 	property_set("ro.build.fingerprint", fingerprint);
+
+	property_set("ro.product.model", cached_properties[_PROP_MODEL]);
 
 	if(!efivar_get_google_clientid(clientid)) {
 		asprintf(&s, "android-%s", clientid);
