@@ -67,6 +67,8 @@ char *locale;
 #define POWER_ON_KEY_TIME       (2 * MSEC_PER_SEC)
 #define UNPLUGGED_SHUTDOWN_TIME (10 * MSEC_PER_SEC)
 
+#define BOOT_BATT_MIN_CAP_THRS   0
+
 #define BATTERY_FULL_THRESH     95
 
 #define LAST_KMSG_PATH          "/proc/last_kmsg"
@@ -116,6 +118,7 @@ struct charger {
 
     struct animation *batt_anim;
     gr_surface surf_unknown;
+    int boot_min_cap;
 };
 
 static struct frame batt_anim_frames[] = {
@@ -668,6 +671,7 @@ void healthd_mode_charger_init(struct healthd_config* config)
     struct charger *charger = &charger_state;
     int i;
     int epollfd;
+    char value[PROPERTY_VALUE_MAX], default_value[PROPERTY_VALUE_MAX];
 
     dump_last_kmsg();
 
@@ -706,6 +710,12 @@ void healthd_mode_charger_init(struct healthd_config* config)
     }
 
     ev_sync_key_state(set_key_callback, charger);
+
+    snprintf(default_value, PROPERTY_VALUE_MAX, "%d", BOOT_BATT_MIN_CAP_THRS);
+    property_get("ro.boot.min.cap", value, default_value);
+    sscanf(value, "%d", &charger->boot_min_cap);
+
+    LOGW("Mininum capacity for Android-boot %d\n", charger->boot_min_cap);
 
     charger->next_screen_transition = -1;
     charger->next_key_check = -1;
