@@ -76,6 +76,7 @@
 #define AID_SDCARD_PICS   1033  /* external storage photos access */
 #define AID_SDCARD_AV     1034  /* external storage audio/video access */
 #define AID_SDCARD_ALL    1035  /* access all users external storage */
+#define AID_VBPIPE        1036  /* access vbpipe */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -170,6 +171,7 @@ static const struct android_id_info android_ids[] = {
     { "misc",          AID_MISC, },
     { "nobody",        AID_NOBODY, },
     { "trace",         AID_TRACE, },
+    { "vbpipe",        AID_VBPIPE,},
 };
 
 #define android_id_count \
