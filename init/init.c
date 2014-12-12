@@ -904,7 +904,8 @@ static bool selinux_is_disabled(void)
     }
 #endif
 
-    return false;
+    return true;//TEMP fix for booting USER failed
+    //return false;
 }
 
 static bool selinux_is_enforcing(void)
