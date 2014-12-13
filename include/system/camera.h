@@ -255,6 +255,13 @@ typedef struct camera_face {
      */
     int32_t mouth[2];
 
+    /**
+     * The confidence level of smile face. The range is 1 to 100. 100 is the
+     * highest confidence. This is supported by both hardware and software
+     * face detection and smile detection.
+     */
+    int32_t smile_score;
+
 } camera_face_t;
 
 /**
