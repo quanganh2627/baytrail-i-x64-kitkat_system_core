@@ -114,18 +114,18 @@ LOCAL_SRC_FILES := $(commonSources) \
         uevent.c
 
 ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += arch-arm/memset32.S
+    LOCAL_SRC_FILES += arch-arm/memset32.S
 else  # !arm
-ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
-LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
-LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
-else # !x86-atom
-ifeq ($(TARGET_ARCH),mips)
-LOCAL_SRC_FILES += arch-mips/android_memset.c
-else # !mips
-LOCAL_SRC_FILES += memory.c
-endif # !mips
-endif # !x86-atom
+    ifeq ($(TARGET_ARCH),x86)
+        LOCAL_CFLAGS += -DHAVE_MEMSET16 -DHAVE_MEMSET32
+        LOCAL_SRC_FILES += arch-x86/android_memset16.S arch-x86/android_memset32.S memory.c
+    else # !x86
+        ifeq ($(TARGET_ARCH),mips)
+            LOCAL_SRC_FILES += arch-mips/android_memset.c
+        else # !mips
+            LOCAL_SRC_FILES += memory.c
+        endif # !mips
+    endif # !x86
 endif # !arm
 
 LOCAL_C_INCLUDES := $(libcutils_c_includes) $(KERNEL_HEADERS)
