@@ -367,7 +367,6 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 	char *ptr;
 	unsigned int i;
 	bool sparse_block;
-	unsigned int skip = 0;
 
 	if (!buf) {
 		return -ENOMEM;
@@ -383,8 +382,8 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 
 		if (to_read == s->block_size) {
 			sparse_block = true;
-			for (i = 0; i < s->block_size / sizeof(uint32_t); i++) {
-				if (buf[i]) {
+			for (i = 1; i < s->block_size / sizeof(uint32_t); i++) {
+				if (buf[0] != buf[i]) {
 					sparse_block = false;
 					break;
 				}
@@ -393,12 +392,10 @@ static int sparse_file_read_normal(struct sparse_file *s, int fd)
 			sparse_block = false;
 		}
 
-		if (sparse_block && skip < (unsigned int)(1<<31)) {
-			skip += s->block_size;
+		if (sparse_block) {
 			/* TODO: add flag to use skip instead of fill for buf[0] == 0 */
-			//sparse_file_add_fill(s, buf[0], to_read, block);
+			sparse_file_add_fill(s, buf[0], to_read, block);
 		} else {
-			skip = 0;
 			sparse_file_add_fd(s, fd, offset, to_read, block);
 		}
 
