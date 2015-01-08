@@ -416,6 +416,13 @@ typedef enum {
     MC_OFFLOAD            = 0x00000004,    // offload multi channel content
  } audio_offload_format_t;
 
+/* Dynamic audio output modes in audio.dynoutput.mode
+ */
+typedef enum {
+    AUDIO_DYN_OUTPUT_MODE_NONE = 0x0,       // no attributes
+    AUDIO_DYN_OUTPUT_MODE_DUP = 0x1,       // duplicated audio output
+} audio_dyn_output_mode_t;
+
  /* The audio input flags are analogous to audio output flags.
  * Currently they are used only when an AudioRecord is created,
  * to indicate a preference to be connected to an input stream with
@@ -479,6 +486,13 @@ static inline bool audio_is_output_devices(audio_devices_t device)
     return (device & AUDIO_DEVICE_BIT_IN) == 0;
 }
 
+static inline bool audio_is_speaker_device(audio_devices_t device)
+{
+    if (device & AUDIO_DEVICE_OUT_SPEAKER)
+        return true;
+    else
+        return false;
+}
 
 static inline bool audio_is_a2dp_device(audio_devices_t device)
 {
