@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2013 Capital Alliance Software LTD (Pekall)
+ * Copyright (C) 2011-2013 Intel Mobile Communications GmbH
  * Copyright (C) 2011 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,6 +62,10 @@ typedef enum {
     AUDIO_STREAM_TTS              = 9,  /* Transmitted Through Speaker.
                                          * Plays over speaker only, silent on other devices.
                                          */
+    // PEKALL FMR begin:
+    FM                            = 10,
+    // PEKALL FMR end
+
     AUDIO_STREAM_ACCESSIBILITY    = 10, /* For accessibility talk back prompts */
     AUDIO_STREAM_REROUTING        = 11, /* For dynamic policy output mixes */
     AUDIO_STREAM_PATCH            = 12, /* For internal audio flinger tracks. Fixed volume */
@@ -138,6 +144,10 @@ typedef enum {
                                           /* An example of remote presentation is Wifi Display */
                                           /*  where a dongle attached to a TV can be used to   */
                                           /*  play the mix captured by this audio source.      */
+    // PEKALL FMR begin:
+    AUDIO_SOURCE_FM_RX              = 9,
+    // PEKALL FMR end
+
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
     AUDIO_SOURCE_FM_TUNER            = 1998,
@@ -594,6 +604,14 @@ enum {
     AUDIO_DEVICE_OUT_AUX_LINE                  = 0x200000,
     /* limited-output speaker device for acoustic safety */
     AUDIO_DEVICE_OUT_SPEAKER_SAFE              = 0x400000,
+    // PEKALL FMR begin:
+    AUDIO_DEVICE_OUT_FM_HEADSET                =
+        (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_WIRED_HEADSET),
+    AUDIO_DEVICE_OUT_FM_HEADPHONE              =
+        (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_WIRED_HEADPHONE),
+    AUDIO_DEVICE_OUT_FM_SPEAKER                = (AUDIO_DEVICE_OUT_FM | AUDIO_DEVICE_OUT_SPEAKER),
+    // PEKALL FMR end
+
     AUDIO_DEVICE_OUT_DEFAULT                   = AUDIO_DEVICE_BIT_DEFAULT,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -655,6 +673,10 @@ enum {
     AUDIO_DEVICE_IN_SPDIF                 = AUDIO_DEVICE_BIT_IN | 0x10000,
     AUDIO_DEVICE_IN_BLUETOOTH_A2DP        = AUDIO_DEVICE_BIT_IN | 0x20000,
     AUDIO_DEVICE_IN_LOOPBACK              = AUDIO_DEVICE_BIT_IN | 0x40000,
+    // PEKALL FMR begin:
+    AUDIO_DEVICE_IN_FM_RX                 = AUDIO_DEVICE_BIT_IN | 0x80000,
+    // PEKALL FMR end
+
     AUDIO_DEVICE_IN_DEFAULT               = AUDIO_DEVICE_BIT_IN | AUDIO_DEVICE_BIT_DEFAULT,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -676,6 +698,10 @@ enum {
                                AUDIO_DEVICE_IN_SPDIF |
                                AUDIO_DEVICE_IN_BLUETOOTH_A2DP |
                                AUDIO_DEVICE_IN_LOOPBACK |
+                               // PEKALL FMR begin:
+                               AUDIO_DEVICE_IN_FM_RX |
+                               // PEKALL FMR end
+
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
     AUDIO_DEVICE_IN_ALL_USB  = (AUDIO_DEVICE_IN_USB_ACCESSORY |
@@ -1009,6 +1035,16 @@ struct audio_patch {
     struct audio_port_config sinks[AUDIO_PATCH_PORTS_MAX];
 };
 
+// PEKALL FMR begin:
+static inline bool audio_is_fm_device(audio_devices_t device)
+{
+    if (device & AUDIO_DEVICE_OUT_FM)
+        return true;
+
+    return false;
+}
+// PEKALL FMR end
+
 
 
 /* a HW synchronization source returned by the audio HAL */
@@ -1019,6 +1055,11 @@ typedef uint32_t audio_hw_sync_t;
 
 static inline bool audio_is_output_device(audio_devices_t device)
 {
+    // PEKALL FMR begin:
+    if (audio_is_fm_device(device))
+        return true;
+    // PEKALL FMR end
+
     if (((device & AUDIO_DEVICE_BIT_IN) == 0) &&
             (popcount(device) == 1) && ((device & ~AUDIO_DEVICE_OUT_ALL) == 0))
         return true;
@@ -1028,6 +1069,11 @@ static inline bool audio_is_output_device(audio_devices_t device)
 
 static inline bool audio_is_input_device(audio_devices_t device)
 {
+    // PEKALL FMR begin:
+    if (device & AUDIO_DEVICE_IN_FM_RX)
+        return true;
+    // PEKALL FMR end
+
     if ((device & AUDIO_DEVICE_BIT_IN) != 0) {
         device &= ~AUDIO_DEVICE_BIT_IN;
         if ((popcount(device) == 1) && ((device & ~AUDIO_DEVICE_IN_ALL) == 0))
