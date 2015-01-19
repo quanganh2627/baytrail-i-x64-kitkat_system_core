@@ -8,8 +8,6 @@ LOCAL_SRC_FILES:= \
 	init.c \
 	devices.c \
 	property_service.c \
-	efivars.c \
-	autodetect.c \
 	util.c \
 	parser.c \
 	keychords.c \
@@ -18,6 +16,11 @@ LOCAL_SRC_FILES:= \
 	ueventd.c \
 	ueventd_parser.c \
 	watchdogd.c
+
+ifeq ($(HAL_AUTODETECT),true)
+LOCAL_SRC_FILES += efivars.c autodetect.c
+LOCAL_CFLAGS += -DHAL_AUTODETECT
+endif
 
 LOCAL_CFLAGS    += -Wno-unused-parameter
 
