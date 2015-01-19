@@ -539,11 +539,15 @@ void load_persist_props(void)
 }
 
 
+#ifdef HAL_AUTODETECT
 extern void autodetect_properties(void);
+#endif
 
 void load_all_props(void)
 {
+#ifdef HAL_AUTODETECT
     autodetect_properties();
+#endif
 
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
