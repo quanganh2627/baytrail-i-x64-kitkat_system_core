@@ -677,7 +677,7 @@ int do_powerctl(int nargs, char **args)
     }
 
     if (strncmp(command, "shutdown", 8) == 0) {
-        if (property_get("ro.sys.powerctl.no.shutdown", override)
+        if (property_get("sys.powerctl.no.shutdown", override)
                 > 0 && !strcmp(override, "1")) {
             if (property_get("sys.charger.connected", override)
                     > 0 && !strcmp(override, "1")) {
