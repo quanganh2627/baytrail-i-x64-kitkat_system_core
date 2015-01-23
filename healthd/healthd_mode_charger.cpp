@@ -248,8 +248,32 @@ static int request_suspend(bool enable)
         return autosuspend_disable();
 }
 #else
-static int request_suspend(bool /*enable*/)
+#define SYSFS_DISPLAY_ENABLE_FILE "/sys/bus/platform/drivers/dcc/e1000000.dcc/enable"
+static void sysfs_write(const char *path, const char *s)
 {
+    char buf[80];
+    int len;
+    int fd = open(path, O_WRONLY);
+
+    if (fd < 0) {
+        strerror_r(errno, buf, sizeof(buf));
+        ALOGE("Error opening %s: %s\n", path, buf);
+        return;
+    }
+
+    len = write(fd, s, strlen(s));
+    if (len < 0) {
+        strerror_r(errno, buf, sizeof(buf));
+        ALOGE("Error writing to %s: %s\n", path, buf);
+    }
+
+    close(fd);
+}
+
+static int request_suspend(bool enable)
+{
+    sysfs_write(SYSFS_DISPLAY_ENABLE_FILE, enable ? "0" : "1");
+
     return 0;
 }
 #endif
