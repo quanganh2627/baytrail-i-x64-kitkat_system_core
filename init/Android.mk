@@ -20,6 +20,7 @@ LOCAL_SRC_FILES:= \
 ifeq ($(HAL_AUTODETECT),true)
 LOCAL_SRC_FILES += efivars.c autodetect.c
 LOCAL_CFLAGS += -DHAL_AUTODETECT
+LOCAL_CFLAGS += -DHAL_AUTODETECT_KMSG_NAME=\"$(HAL_KMSG_NAME)\"
 endif
 
 LOCAL_CFLAGS    += -Wno-unused-parameter

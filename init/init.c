@@ -998,6 +998,10 @@ static void selinux_initialize(void)
     security_setenforce(is_enforcing);
 }
 
+#ifdef HAL_AUTODETECT
+extern void autodetect_init(void);
+#endif
+
 int main(int argc, char **argv)
 {
     int fd_count = 0;
@@ -1050,6 +1054,10 @@ int main(int argc, char **argv)
     get_hardware_name(hardware, &revision);
 
     process_kernel_cmdline();
+
+#ifdef HAL_AUTODETECT
+    autodetect_init();
+#endif
 
     union selinux_callback cb;
     cb.func_log = log_callback;

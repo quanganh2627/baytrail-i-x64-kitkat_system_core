@@ -859,3 +859,21 @@ void autodetect_properties(void)
 
 	get_edid_dpi();
 }
+
+#ifndef HAL_AUTODETECT_KMSG_NAME
+#define HAL_AUTODETECT_KMSG_NAME "/dev/__hal_kmsg__"
+#endif
+
+void autodetect_init(void)
+{
+	int rc;
+
+	/*
+	 * Create a klog node for hald
+	 * Because os sepolicy constraints, hald cannot use mknod. So it's
+	 * created by init and opened by hald.
+	 */
+	if (mknod(HAL_AUTODETECT_KMSG_NAME, S_IFCHR | 0600, (1 << 8) | 11) < 0)
+		ERROR("Could not create '%s' character device: %s\n",
+		      HAL_AUTODETECT_KMSG_NAME, strerror(errno));
+}
