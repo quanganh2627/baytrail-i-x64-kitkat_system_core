@@ -860,6 +860,166 @@ void autodetect_properties(void)
 	get_edid_dpi();
 }
 
+
+char boardname[4096];
+
+/* DMI board name */
+static void read_board_name(void)
+{
+	FILE *file;
+	file = fopen("/sys/class/dmi/id/board_name", "r");
+	if (!file)
+		return;
+	if (!fgets(boardname, 4095, file))
+		ERROR("Failed to read boardname\n");
+	fclose(file);
+}
+
+
+/* sysfs helpers */
+static void write_int_to_file(char *filename, int value)
+{
+	FILE *file;
+
+	file = fopen(filename, "w");
+	if (!file) {
+		ERROR("Cannot write %i to %s: %s\n",
+		      value, filename, strerror(errno));
+		return;
+	}
+
+	fprintf(file, "%i\n", value);
+	fclose(file);
+}
+
+
+static void write_string_to_file(char *filename, char *string)
+{
+	FILE *file;
+
+	file = fopen(filename, "w");
+	if (!file) {
+		ERROR("INIT Cannot write %s to %s: %s\n",
+		      string, filename, strerror(errno));
+		return;
+	}
+
+	fprintf(file, "%s\n", string);
+	fclose(file);
+}
+
+/* SATA links */
+static void do_sata_links(void)
+{
+	DIR *dir;
+	struct dirent *entry;
+
+	dir = opendir("/sys/class/scsi_host");
+	if (!dir)
+		return;
+
+	do {
+		char *filename;
+
+		entry = readdir(dir);
+		if (!entry)
+			break;
+
+		if (strcmp(entry->d_name, ".") == 0)
+			continue;
+		if (strcmp(entry->d_name, "..") == 0)
+			continue;
+
+		if (asprintf(&filename,
+			     "/sys/class/scsi_host/%s/link_power_management_policy",
+			     entry->d_name) < 0)
+			return;
+
+		write_string_to_file(filename, "min_power");
+		free(filename);
+
+	} while (1);
+
+	closedir(dir);
+}
+
+/* Virtual Memory tweaks */
+static void do_vm_tweaks(void)
+{
+	/* synchronous dirty ratio --> 50% */
+	write_int_to_file("/proc/sys/vm/dirty_ratio", 50);
+	/*
+	 * start IO at 30% not 10%...
+	 * the FS/timeout based write generates better IO patterns
+	 */
+	write_int_to_file("/proc/sys/vm/dirty_background_ratio", 30);
+	/*
+	 * 15 seconds before the VM starts writeback,
+	 * allowing the FS to deal with this better
+	 */
+	write_int_to_file("/proc/sys/vm/dirty_writeback_centisecs", 1500);
+	write_int_to_file("/sys/kernel/mm/transparent_hugepage/khugepaged/scan_sleep_millisecs",
+			  300000);
+
+	write_int_to_file("/sys/block/sda/queue/nr_requests", 4096);
+
+	 /* android can't cope with more than 32k */
+	write_int_to_file("/proc/sys/vm/mmap_min_addr", 32 * 1024);
+
+	/* oom less */
+	write_int_to_file("/proc/sys/vm/extfrag_threshold", 100);
+	write_int_to_file("/sys/kernel/mm/ksm/sleep_millisecs", 10000);
+	write_int_to_file("/sys/kernel/mm/ksm/run", 1);
+	write_int_to_file("/sys/kernel/mm/ksm/pages_to_scan", 1000);
+}
+
+/* NMI watch dog */
+static void do_nmi_watchdog(void)
+{
+	write_int_to_file("/proc/sys/kernel/nmi_watchdog", 0);
+}
+
+/* Audio PM */
+static void do_audio(void)
+{
+	write_int_to_file("/sys/module/snd_hda_intel/parameters/power_save", 1);
+}
+
+/* P-state */
+static void do_pstate(void)
+{
+	write_string_to_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor",
+			     "powersave");
+	/*
+	 * we want at least half performance, this helps us in race-to-halt
+	 * and to give us reasonable responses
+	 */
+	write_int_to_file("/sys/devices/system/cpu/intel_pstate/min_perf_pct", 50);
+}
+
+static int pnp_init(void)
+{
+	read_board_name();
+
+	/* SATA link power management -- except on preproduction hardware */
+	if (!strcmp(boardname, "NOTEBOOK\n"))
+		do_sata_links();
+
+	/* VM writeback timeout and dirty pages */
+	do_vm_tweaks();
+
+	/* turn off the NMI wathdog */
+	do_nmi_watchdog();
+
+	/* Audio PM */
+	do_audio();
+
+	/* P-state */
+	do_pstate();
+
+	return 0;
+}
+
 #ifndef HAL_AUTODETECT_KMSG_NAME
 #define HAL_AUTODETECT_KMSG_NAME "/dev/__hal_kmsg__"
 #endif
@@ -876,4 +1036,6 @@ void autodetect_init(void)
 	if (mknod(HAL_AUTODETECT_KMSG_NAME, S_IFCHR | 0600, (1 << 8) | 11) < 0)
 		ERROR("Could not create '%s' character device: %s\n",
 		      HAL_AUTODETECT_KMSG_NAME, strerror(errno));
+
+	pnp_init();
 }
