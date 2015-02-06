@@ -35,6 +35,9 @@ __BEGIN_DECLS
 /* device address used to refer to the standard remote submix */
 #define AUDIO_REMOTE_SUBMIX_DEVICE_ADDRESS "0"
 
+/* Always Listening Route/VTSV */
+#define AUDIO_PARAMETER_KEY_LPAL_DEVICE "lpal_device"
+
 /* AudioFlinger and AudioPolicy services use I/O handles to identify audio sources and sinks */
 typedef int audio_io_handle_t;
 #define AUDIO_IO_HANDLE_NONE    0
