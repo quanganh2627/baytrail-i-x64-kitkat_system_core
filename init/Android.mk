@@ -17,6 +17,11 @@ LOCAL_SRC_FILES:= \
 	ueventd_parser.c \
 	watchdogd.c
 
+ifeq ($(HAL_AUTODETECT),true)
+LOCAL_SRC_FILES += efivars.c autodetect.c
+LOCAL_CFLAGS += -DHAL_AUTODETECT
+endif
+
 LOCAL_CFLAGS    += -Wno-unused-parameter
 
 ifeq ($(strip $(INIT_BOOTCHART)),true)

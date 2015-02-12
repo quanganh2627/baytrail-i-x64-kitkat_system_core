@@ -501,6 +501,8 @@ void property_init(void)
     init_property_area();
 }
 
+
+
 void property_load_boot_defaults(void)
 {
     load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT, NULL);
@@ -536,8 +538,17 @@ void load_persist_props(void)
     load_persistent_properties();
 }
 
+
+#ifdef HAL_AUTODETECT
+extern void autodetect_properties(void);
+#endif
+
 void load_all_props(void)
 {
+#ifdef HAL_AUTODETECT
+    autodetect_properties();
+#endif
+
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);

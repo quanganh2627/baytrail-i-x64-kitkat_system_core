@@ -472,12 +472,20 @@ done:
     free(data);
 }
 
+#ifdef HAL_AUTODETECT
+extern void autodetect_properties(void);
+#endif
+
 void import_kernel_cmdline(int in_qemu,
                            void (*import_kernel_nv)(char *name, int in_qemu))
 {
     char cmdline[2048];
     char *ptr;
     int fd;
+
+#ifdef HAL_AUTODETECT
+    autodetect_properties();
+#endif
 
     fd = open("/proc/cmdline", O_RDONLY);
     if (fd >= 0) {

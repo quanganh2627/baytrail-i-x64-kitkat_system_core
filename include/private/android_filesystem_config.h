@@ -78,6 +78,8 @@
 #define AID_SDCARD_ALL    1035  /* access all users external storage */
 #define AID_LOGD          1036  /* log daemon */
 #define AID_SHARED_RELRO  1037  /* creator of shared GNU RELRO files */
+#define AID_HAL           1100  /* HAL daemon */
+#define AID_TELEMETRY     1101  /* telemetry daemons */
 
 #define AID_SHELL         2000  /* adb and debug shell user */
 #define AID_CACHE         2001  /* cache access */
@@ -156,6 +158,8 @@ static const struct android_id_info android_ids[] = {
     { "sdcard_all",    AID_SDCARD_ALL, },
     { "logd",          AID_LOGD, },
     { "shared_relro",  AID_SHARED_RELRO, },
+    { "hal",           AID_HAL, },
+    { "telemetry",     AID_TELEMETRY, },
 
     { "shell",         AID_SHELL, },
     { "cache",         AID_CACHE, },
@@ -209,8 +213,10 @@ static const struct fs_path_config android_dirs[] = {
     { 00750, AID_ROOT,   AID_SHELL,  0, "sbin" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/bin" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/vendor" },
+    { 00755, AID_ROOT,   AID_SHELL,  0, "system/vendor/gfx/ufo_byt/bin" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "system/xbin" },
     { 00755, AID_ROOT,   AID_ROOT,   0, "system/etc/ppp" },
+    { 00550, AID_ROOT,   AID_TELEMETRY,   0, "system/etc/tm" },
     { 00755, AID_ROOT,   AID_SHELL,  0, "vendor" },
     { 00777, AID_ROOT,   AID_ROOT,   0, "sdcard" },
     { 00755, AID_ROOT,   AID_ROOT,   0, 0 },
@@ -231,6 +237,7 @@ static const struct fs_path_config android_files[] = {
     { 00550, AID_DHCP,      AID_SHELL,     0, "system/etc/dhcpcd/dhcpcd-run-hooks" },
     { 00444, AID_RADIO,     AID_AUDIO,     0, "system/etc/AudioPara4.csv" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/ppp/*" },
+    { 00440, AID_ROOT,      AID_TELEMETRY, 0, "system/etc/tm/*" },
     { 00555, AID_ROOT,      AID_ROOT,      0, "system/etc/rc.*" },
     { 00644, AID_SYSTEM,    AID_SYSTEM,    0, "data/app/*" },
     { 00644, AID_MEDIA_RW,  AID_MEDIA_RW,  0, "data/media/*" },
@@ -255,11 +262,15 @@ static const struct fs_path_config android_files[] = {
 
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/uncrypt" },
     { 00750, AID_ROOT,      AID_ROOT,      0, "system/bin/install-recovery.sh" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/wifi/aosp/wpa_*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/wifi/brcm/wpa_*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/wifi/rtk/wpa_*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/bin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib/valgrind/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "system/lib64/valgrind/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/xbin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/bin/*" },
+    { 00755, AID_ROOT,      AID_SHELL,     0, "system/vendor/gfx/ufo_byt/bin/*" },
     { 00755, AID_ROOT,      AID_SHELL,     0, "vendor/bin/*" },
     { 00750, AID_ROOT,      AID_SHELL,     0, "sbin/*" },
     { 00755, AID_ROOT,      AID_ROOT,      0, "bin/*" },
