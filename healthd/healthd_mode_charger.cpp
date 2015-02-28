@@ -248,7 +248,7 @@ static int request_suspend(bool enable)
         return autosuspend_disable();
 }
 #else
-#define SYSFS_DISPLAY_ENABLE_FILE "/sys/bus/platform/drivers/dcc/e1000000.dcc/enable"
+#define SYSFS_BACKLIGHT_BRIGHTNESS_FILE "/sys/devices/virtual/leds/lcd-backlight/brightness"
 static void sysfs_write(const char *path, const char *s)
 {
     char buf[80];
@@ -272,7 +272,7 @@ static void sysfs_write(const char *path, const char *s)
 
 static int request_suspend(bool enable)
 {
-    sysfs_write(SYSFS_DISPLAY_ENABLE_FILE, enable ? "0" : "1");
+    sysfs_write(SYSFS_BACKLIGHT_BRIGHTNESS_FILE, enable ? "0" : "127");
 
     return 0;
 }
