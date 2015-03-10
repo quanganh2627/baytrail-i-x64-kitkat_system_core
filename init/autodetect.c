@@ -833,7 +833,6 @@ static void create_fingerprint(void)
 	property_set("ro.product.device", cached_properties[_PROP_DEVICE]);
 	property_set("ro.build.product", cached_properties[_PROP_DEVICE]);
 	property_set("ro.product.board", cached_properties[_PROP_DEVICE]);
-	property_set("ro.board.platform", cached_properties[_PROP_DEVICE]);
 
 	sprintf(fingerprint, "%s/%s/%s%s", cached_properties[_PROP_BRAND], cached_properties[_PROP_NAME], cached_properties[_PROP_DEVICE], c);
 	property_set("ro.build.fingerprint", fingerprint);
