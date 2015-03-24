@@ -103,6 +103,25 @@ static void remount_ro(void)
     return;
 }
 
+#define SYSFS_BACKLIGHT_BRIGHTNESS_FILE "/sys/devices/virtual/leds/lcd-backlight/brightness"
+static void sysfs_write(const char *path, const char *s)
+{
+    char buf[80];
+    int len;
+    int fd = open(path, O_WRONLY);
+
+    if (fd < 0) {
+        strerror_r(errno, buf, sizeof(buf));
+        return;
+    }
+
+    len = write(fd, s, strlen(s));
+    if (len < 0) {
+        strerror_r(errno, buf, sizeof(buf));
+    }
+
+    close(fd);
+}
 
 int android_reboot(int cmd, int flags UNUSED, char *arg)
 {
@@ -110,6 +129,7 @@ int android_reboot(int cmd, int flags UNUSED, char *arg)
 
     sync();
     remount_ro();
+    sysfs_write(SYSFS_BACKLIGHT_BRIGHTNESS_FILE, "0");
 
     switch (cmd) {
         case ANDROID_RB_RESTART:
