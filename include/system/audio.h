@@ -63,12 +63,12 @@ typedef enum {
                                          * Plays over speaker only, silent on other devices.
                                          */
     // PEKALL FMR begin:
-    FM                            = 10,
+    AUDIO_STREAM_FM               = 10,
     // PEKALL FMR end
 
-    AUDIO_STREAM_ACCESSIBILITY    = 10, /* For accessibility talk back prompts */
-    AUDIO_STREAM_REROUTING        = 11, /* For dynamic policy output mixes */
-    AUDIO_STREAM_PATCH            = 12, /* For internal audio flinger tracks. Fixed volume */
+    AUDIO_STREAM_ACCESSIBILITY    = 11, /* For accessibility talk back prompts */
+    AUDIO_STREAM_REROUTING        = 12, /* For dynamic policy output mixes */
+    AUDIO_STREAM_PATCH            = 13, /* For internal audio flinger tracks. Fixed volume */
     AUDIO_STREAM_PUBLIC_CNT       = AUDIO_STREAM_TTS + 1,
     AUDIO_STREAM_CNT              = AUDIO_STREAM_PATCH + 1,
 } audio_stream_type_t;
