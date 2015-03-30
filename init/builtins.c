@@ -136,9 +136,16 @@ static int insmod(const char *filename, char *options)
 {
     void *module;
     unsigned size;
+    char filename_val[PROP_VALUE_MAX];
     int ret;
 
-    module = read_file(filename, &size);
+    ret = expand_props(filename_val, filename, sizeof(filename_val));
+    if (ret) {
+        ERROR("cannot expand '%s'\n", filename);
+        return -EINVAL;
+    }
+
+    module = read_file(filename_val, &size);
     if (!module)
         return -1;
 
