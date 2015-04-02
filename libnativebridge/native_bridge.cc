@@ -239,24 +239,20 @@ bool PreInitializeNativeBridge(const char* app_data_dir_in, const char* instruct
     return false;
   }
 
-  if (app_data_dir_in == nullptr) {
-    ALOGE("Application private directory cannot be null.");
-    CloseNativeBridge(true);
-    return false;
+  if (app_data_dir_in != nullptr) {
+    // Create the path to the application code cache directory.
+    // The memory will be release after Initialization or when the native bridge is closed.
+    const size_t len = strlen(app_data_dir_in) + strlen(kCodeCacheDir) + 2; // '\0' + '/'
+    app_code_cache_dir = new char[len];
+    snprintf(app_code_cache_dir, len, "%s/%s", app_data_dir_in, kCodeCacheDir);
   }
-
-  // Create the path to the application code cache directory.
-  // The memory will be release after Initialization or when the native bridge is closed.
-  const size_t len = strlen(app_data_dir_in) + strlen(kCodeCacheDir) + 2; // '\0' + '/'
-  app_code_cache_dir = new char[len];
-  snprintf(app_code_cache_dir, len, "%s/%s", app_data_dir_in, kCodeCacheDir);
 
   // Bind-mount /system/lib{,64}/<isa>/cpuinfo to /proc/cpuinfo.
   // Failure is not fatal and will keep the native bridge in kPreInitialized.
   state = NativeBridgeState::kPreInitialized;
 
 #ifndef __APPLE__
-  if (instruction_set == nullptr) {
+  if (instruction_set == nullptr || app_data_dir_in == nullptr) {
     return true;
   }
   size_t isa_len = strlen(instruction_set);
@@ -385,21 +381,23 @@ bool InitializeNativeBridge(JNIEnv* env, const char* instruction_set) {
   // point we are not multi-threaded, so we do not need locking here.
 
   if (state == NativeBridgeState::kPreInitialized) {
-    // Check for code cache: if it doesn't exist try to create it.
-    struct stat st;
-    if (stat(app_code_cache_dir, &st) == -1) {
-      if (errno == ENOENT) {
-        if (mkdir(app_code_cache_dir, S_IRWXU | S_IRWXG | S_IXOTH) == -1) {
-          ALOGE("Cannot create code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+    if (app_code_cache_dir != nullptr) {
+      // Check for code cache: if it doesn't exist try to create it.
+      struct stat st;
+      if (stat(app_code_cache_dir, &st) == -1) {
+        if (errno == ENOENT) {
+          if (mkdir(app_code_cache_dir, S_IRWXU | S_IRWXG | S_IXOTH) == -1) {
+            ALOGE("Cannot create code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+            CloseNativeBridge(true);
+          }
+        } else {
+          ALOGE("Cannot stat code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
           CloseNativeBridge(true);
         }
-      } else {
-        ALOGE("Cannot stat code cache directory %s: %s.", app_code_cache_dir, strerror(errno));
+      } else if (!S_ISDIR(st.st_mode)) {
+        ALOGE("Code cache is not a directory %s.", app_code_cache_dir);
         CloseNativeBridge(true);
       }
-    } else if (!S_ISDIR(st.st_mode)) {
-      ALOGE("Code cache is not a directory %s.", app_code_cache_dir);
-      CloseNativeBridge(true);
     }
 
     // If we're still PreInitialized (dind't fail the code cache checks) try to initialize.
